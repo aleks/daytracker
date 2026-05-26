@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -17,8 +18,10 @@ import (
 
 // terminalKinds are PR states that will never change; skip them in refresh.
 var terminalKinds = map[string]bool{
-	"pr_merged": true,
-	"pr_closed": true,
+	"authored_merged": true,
+	"authored_closed": true,
+	"reviewed_merged": true,
+	"reviewed_closed": true,
 }
 
 type Worker struct {
@@ -32,27 +35,27 @@ type Worker struct {
 
 func New(database *gorm.DB, registry *connector.Registry) *Worker {
 	interval := 15 * time.Minute
-	if v := os.Getenv("SYNC_INTERVAL"); v != "" {
+	if v := os.Getenv("DAYTRACKER_SYNC_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			interval = d
 		}
 	}
 
 	refreshInterval := 5 * time.Minute
-	if v := os.Getenv("STATUS_REFRESH_INTERVAL"); v != "" {
+	if v := os.Getenv("DAYTRACKER_STATUS_REFRESH_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			refreshInterval = d
 		}
 	}
 
 	backfill := 14
-	if v := os.Getenv("BACKFILL_DAYS"); v != "" {
+	if v := os.Getenv("DAYTRACKER_BACKFILL_DAYS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			backfill = n
 		}
 	}
 
-	return &Worker{
+	w := &Worker{
 		db:              database,
 		registry:        registry,
 		trigger:         make(chan string, 10),
@@ -60,6 +63,8 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 		refreshInterval: refreshInterval,
 		backfill:        backfill,
 	}
+	log.Printf("worker: sync=%s refresh=%s backfill=%d days", interval, refreshInterval, backfill)
+	return w
 }
 
 // TriggerChan returns a send-only channel that causes an immediate sync.
@@ -69,6 +74,9 @@ func (w *Worker) TriggerChan() chan<- string {
 
 func (w *Worker) Run(ctx context.Context) {
 	w.runBackfill(ctx)
+	if ctx.Err() != nil {
+		return
+	}
 
 	syncTicker := time.NewTicker(w.interval)
 	refreshTicker := time.NewTicker(w.refreshInterval)
@@ -76,11 +84,17 @@ func (w *Worker) Run(ctx context.Context) {
 	defer refreshTicker.Stop()
 
 	// Run an initial status refresh shortly after startup.
-	go w.refreshAllStatuses(ctx)
+	var refreshWg sync.WaitGroup
+	refreshWg.Add(1)
+	go func() {
+		defer refreshWg.Done()
+		w.refreshAllStatuses(ctx)
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
+			refreshWg.Wait()
 			return
 		case name := <-w.trigger:
 			if name == "" {
@@ -97,22 +111,28 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) runBackfill(ctx context.Context) {
+	log.Printf("worker: starting backfill for %d days", w.backfill)
 	today := utcToday()
 	for i := 0; i < w.backfill; i++ {
+		if ctx.Err() != nil {
+			log.Printf("worker: backfill interrupted at day %d", i)
+			return
+		}
 		date := today.AddDate(0, 0, -i)
 		w.syncAll(ctx, date)
 	}
+	log.Printf("worker: backfill complete")
 }
 
 func (w *Worker) syncAll(ctx context.Context, date time.Time) {
-	eg, egCtx := errgroup.WithContext(ctx)
+	var eg errgroup.Group
 	for _, c := range w.registry.All() {
 		c := c
 		if !c.IsConfigured() {
 			continue
 		}
 		eg.Go(func() error {
-			return w.syncOne(egCtx, c.Name(), date)
+			return w.syncOne(ctx, c.Name(), date)
 		})
 	}
 	if err := eg.Wait(); err != nil {
@@ -129,6 +149,7 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 		return nil
 	}
 
+	log.Printf("worker: sync %s %s", name, date.Format("2006-01-02"))
 	items, err := c.Fetch(ctx, date)
 
 	state := db.ConnectorState{Name: name}
@@ -137,7 +158,7 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 	if err != nil {
 		state.LastError = err.Error()
 		w.db.Save(&state)
-		log.Printf("worker: connector %s error: %v", name, err)
+		log.Printf("worker: %s %s error: %v", name, date.Format("2006-01-02"), err)
 		return err
 	}
 
@@ -145,6 +166,8 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 	state.LastError = ""
 	state.LastSyncAt = &now
 	w.db.Save(&state)
+
+	log.Printf("worker: %s %s fetched %d items", name, date.Format("2006-01-02"), len(items))
 
 	if len(items) == 0 {
 		return nil

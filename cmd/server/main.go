@@ -9,15 +9,21 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	daytracker "github.com/aleksmaksimow/daytracker"
 	"github.com/aleksmaksimow/daytracker/internal/api"
 	"github.com/aleksmaksimow/daytracker/internal/connector"
 	"github.com/aleksmaksimow/daytracker/internal/db"
 	"github.com/aleksmaksimow/daytracker/internal/worker"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err == nil {
+		log.Println("server: loaded .env")
+	}
+
 	database, err := db.Open()
 	if err != nil {
 		log.Fatalf("db: %v", err)
@@ -25,10 +31,12 @@ func main() {
 
 	registry := connector.NewRegistry()
 	registry.Register(connector.NewGitHub())
+	registry.Register(connector.NewJira())
+	registry.Register(connector.NewConfluence())
 
 	w := worker.New(database, registry)
 
-	port := os.Getenv("PORT")
+	port := os.Getenv("DAYTRACKER_PORT")
 	if port == "" {
 		port = "8080"
 	}
@@ -62,6 +70,10 @@ func main() {
 
 	<-ctx.Done()
 	log.Println("server: shutting down")
-	srv.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("server: shutdown error: %v", err)
+	}
 	wg.Wait()
 }
