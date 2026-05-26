@@ -8,7 +8,7 @@ import (
 )
 
 func Open() (*gorm.DB, error) {
-	path := os.Getenv("DB_PATH")
+	path := os.Getenv("DAYTRACKER_DB_PATH")
 	if path == "" {
 		path = "./daytracker.db"
 	}

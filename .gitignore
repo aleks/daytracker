@@ -4,4 +4,5 @@ daytracker.db
 web/dist/
 web/node_modules/
 .env
-server
+/server
+/check

@@ -32,12 +32,18 @@ const STATE_META: Record<string, KindMeta> = {
 
 // Fallback for non-prefixed kinds (Jira, Confluence, legacy).
 const KIND_META: Record<string, KindMeta> = {
-  in_progress:    { label: 'in progress', badge: 'open'    },
-  in_review:      { label: 'in review',   badge: 'review'  },
-  done:           { label: 'done',        badge: 'merged'  },
-  page_created:   { label: 'created',     badge: 'neutral' },
-  page_edited:    { label: 'edited',      badge: 'neutral' },
-  comment_added:  { label: 'comment',     badge: 'neutral' },
+  in_progress:      { label: 'in progress', badge: 'open'    },
+  in_review:        { label: 'in review',   badge: 'review'  },
+  done:             { label: 'done',        badge: 'merged'  },
+  jira_todo:             { label: 'to do',       badge: 'neutral' },
+  jira_in_progress:      { label: 'in progress', badge: 'open'    },
+  jira_done:             { label: 'done',        badge: 'merged'  },
+  confluence_created:    { label: 'created',     badge: 'open'    },
+  confluence_edited:     { label: 'edited',      badge: 'neutral' },
+  confluence_commented:  { label: 'commented',   badge: 'review'  },
+  page_created:          { label: 'created',     badge: 'neutral' },
+  page_edited:           { label: 'edited',      badge: 'neutral' },
+  comment_added:         { label: 'comment',     badge: 'neutral' },
 }
 
 function kindMeta(kind: string): KindMeta {
