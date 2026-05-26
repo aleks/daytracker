@@ -230,6 +230,37 @@ body {
   opacity: 1;
 }
 
+.task-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.task-delete-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-error);
+}
+
+.task-delete-yes,
+.task-delete-no {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  padding: 2px var(--space-sm);
+}
+
+.task-delete-yes {
+  color: var(--color-error);
+}
+
+.task-delete-no {
+  color: var(--color-text-muted);
+}
+
 /* ── Activity ──────────────────────────────────────────────────── */
 
 .activity-empty {
