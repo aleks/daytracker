@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { api } from '../api'
 import type { Task } from '../types'
 
+const URL_RE = /https?:\/\/[^\s]+/g
+
+function parseTaskTitle(title: string): { text: string; urls: string[] } {
+  const urls = title.match(URL_RE) ?? []
+  const text = title.replace(URL_RE, '').replace(/\s+/g, ' ').trim()
+  return { text, urls }
+}
+
 interface Props {
   date: string
   tasks: Task[]
@@ -145,9 +153,27 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
                 }}
                 onBlur={() => commitEdit(task)}
               />
-            ) : (
-              <span class="task-title" onDblClick={() => startEdit(task)} title="Double-click to edit">{task.title}</span>
-            )}
+            ) : (() => {
+              const { text, urls } = parseTaskTitle(task.title)
+              return (
+                <span class="task-title" onDblClick={() => startEdit(task)} title="Double-click to edit">
+                  {text}
+                  {urls.map((url, i) => (
+                    <a
+                      key={i}
+                      class="task-link-btn"
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={url}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      Open link{urls.length > 1 ? ` ${i + 1}` : ''}
+                    </a>
+                  ))}
+                </span>
+              )
+            })()}
             {onCopyToToday && !task.done && (
               <button
                 class="task-copy"
