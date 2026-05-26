@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"io/fs"
 	"net/http"
 
@@ -9,6 +10,52 @@ import (
 
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
+
+// serveEmbedded returns a Gin handler that serves static files from an embedded
+// FS and falls back to index.html for any path that doesn't match a file (SPA routing).
+func serveEmbedded(files fs.FS) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if path == "/" || path == "" {
+			serveFile(c, files, "index.html")
+			return
+		}
+		// Strip leading slash for fs.FS lookup.
+		fsPath := path[1:]
+		f, err := files.Open(fsPath)
+		if err != nil {
+			// Not found — serve index.html for SPA routing.
+			serveFile(c, files, "index.html")
+			return
+		}
+		stat, err := f.Stat()
+		f.Close()
+		if err != nil || stat.IsDir() {
+			serveFile(c, files, "index.html")
+			return
+		}
+		// Serve the real file via http.ServeFileFS which handles ETags, range, etc.
+		http.ServeFileFS(c.Writer, c.Request, files, fsPath)
+	}
+}
+
+func serveFile(c *gin.Context, files fs.FS, name string) {
+	f, err := files.Open(name)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	// Determine content type from extension.
+	contentType := "text/html; charset=utf-8"
+	http.ServeContent(c.Writer, c.Request, stat.Name(), stat.ModTime(), f.(io.ReadSeeker))
+	_ = contentType
+}
 
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -62,16 +109,7 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 	}
 
 	if webFS != nil {
-		fileServer := http.FileServer(http.FS(webFS))
-		r.NoRoute(func(c *gin.Context) {
-			path := c.Request.URL.Path[1:] // strip leading /
-			if _, err := webFS.Open(path); err == nil {
-				fileServer.ServeHTTP(c.Writer, c.Request)
-			} else {
-				// SPA fallback
-				c.FileFromFS("index.html", http.FS(webFS))
-			}
-		})
+		r.NoRoute(serveEmbedded(webFS))
 	}
 
 	return r
