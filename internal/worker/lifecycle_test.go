@@ -194,8 +194,9 @@ type callTrackingConnector struct {
 	onFetch func(time.Time)
 }
 
-func (c *callTrackingConnector) Name() string       { return c.name }
-func (c *callTrackingConnector) IsConfigured() bool { return true }
+func (c *callTrackingConnector) Name() string                 { return c.name }
+func (c *callTrackingConnector) IsConfigured() bool           { return true }
+func (c *callTrackingConnector) KindLabel(kind string) string { return kind }
 func (c *callTrackingConnector) Fetch(_ context.Context, date time.Time) ([]db.ActivityItem, error) {
 	if c.onFetch != nil {
 		c.onFetch(date)

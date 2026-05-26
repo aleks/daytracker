@@ -51,7 +51,7 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 
 	var bw *backup.Writer
 	if root := os.Getenv("DAYTRACKER_BACKUP_DIR"); root != "" {
-		bw = backup.New(root, database)
+		bw = backup.New(root, database, registry)
 		log.Printf("worker: backup dir=%s", root)
 	}
 

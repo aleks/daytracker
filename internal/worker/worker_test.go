@@ -56,8 +56,9 @@ type stubConnector struct {
 	calls      int
 }
 
-func (s *stubConnector) Name() string        { return s.name }
-func (s *stubConnector) IsConfigured() bool  { return s.configured }
+func (s *stubConnector) Name() string                    { return s.name }
+func (s *stubConnector) IsConfigured() bool              { return s.configured }
+func (s *stubConnector) KindLabel(kind string) string    { return kind }
 func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem, error) {
 	s.calls++
 	return s.items, s.err

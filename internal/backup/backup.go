@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/aleksmaksimow/daytracker/internal/connector"
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
 
@@ -19,12 +20,13 @@ var urlRE = regexp.MustCompile(`https?://\S+`)
 // Writer writes daily markdown snapshots to a directory tree organised as
 // <root>/YYYY/MM/DD.md.
 type Writer struct {
-	root string
-	db   *gorm.DB
+	root     string
+	db       *gorm.DB
+	registry *connector.Registry
 }
 
-func New(root string, database *gorm.DB) *Writer {
-	return &Writer{root: root, db: database}
+func New(root string, database *gorm.DB, registry *connector.Registry) *Writer {
+	return &Writer{root: root, db: database, registry: registry}
 }
 
 // WriteDay renders the given date to its markdown file, creating parent
@@ -56,7 +58,7 @@ func (w *Writer) WriteDay(ctx context.Context, date time.Time) error {
 		return nil
 	}
 
-	content := render(date, tasks, activities)
+	content := w.render(date, tasks, activities)
 
 	dir := filepath.Join(w.root, date.Format("2006"), date.Format("01"))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -71,7 +73,7 @@ func (w *Writer) WriteDay(ctx context.Context, date time.Time) error {
 	return nil
 }
 
-func render(date time.Time, tasks []db.Task, activities []db.ActivityItem) string {
+func (w *Writer) render(date time.Time, tasks []db.Task, activities []db.ActivityItem) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s\n", date.Format("2006-01-02"))
@@ -88,10 +90,6 @@ func render(date time.Time, tasks []db.Task, activities []db.ActivityItem) strin
 	}
 
 	// Group activities by source, preserving the order sources first appear.
-	type group struct {
-		source string
-		items  []db.ActivityItem
-	}
 	var order []string
 	bySource := make(map[string][]db.ActivityItem)
 	for _, a := range activities {
@@ -104,16 +102,27 @@ func render(date time.Time, tasks []db.Task, activities []db.ActivityItem) strin
 	for _, source := range order {
 		items := bySource[source]
 		fmt.Fprintf(&b, "\n## %s\n\n", sectionTitle(source))
+		c, _ := w.registry.Get(source)
 		for _, a := range items {
+			label := kindLabel(c, a.Kind)
 			if a.URL != "" {
-				fmt.Fprintf(&b, "- [%s](%s) _%s_\n", a.Title, a.URL, kindLabel(a.Kind))
+				fmt.Fprintf(&b, "- [%s](%s) _%s_\n", a.Title, a.URL, label)
 			} else {
-				fmt.Fprintf(&b, "- %s _%s_\n", a.Title, kindLabel(a.Kind))
+				fmt.Fprintf(&b, "- %s _%s_\n", a.Title, label)
 			}
 		}
 	}
 
 	return b.String()
+}
+
+// kindLabel resolves a human-readable label using the connector if available,
+// falling back to the raw kind string.
+func kindLabel(c connector.Connector, kind string) string {
+	if c != nil {
+		return c.KindLabel(kind)
+	}
+	return kind
 }
 
 func sectionTitle(source string) string {
@@ -150,33 +159,4 @@ func renderTaskTitle(title string) string {
 		fmt.Fprintf(&sb, " [%s](%s)", label, u)
 	}
 	return sb.String()
-}
-
-func kindLabel(kind string) string {
-	switch kind {
-	case "authored_open":
-		return "open"
-	case "authored_merged":
-		return "merged"
-	case "authored_closed":
-		return "closed"
-	case "reviewed_open":
-		return "reviewed · open"
-	case "reviewed_merged":
-		return "reviewed · merged"
-	case "reviewed_closed":
-		return "reviewed · closed"
-	case "jira_todo":
-		return "to do"
-	case "jira_in_progress":
-		return "in progress"
-	case "jira_done":
-		return "done"
-	case "confluence_created":
-		return "created"
-	case "confluence_edited":
-		return "edited"
-	default:
-		return kind
-	}
 }

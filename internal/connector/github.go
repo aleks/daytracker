@@ -38,6 +38,35 @@ func (g *GitHubConnector) Name() string { return "github" }
 
 func (g *GitHubConnector) IsConfigured() bool { return g.token != "" }
 
+func (g *GitHubConnector) KindLabel(kind string) string {
+	switch kind {
+	case "authored_open":
+		return "open"
+	case "authored_merged":
+		return "merged"
+	case "authored_closed":
+		return "closed"
+	case "authored_draft":
+		return "draft"
+	case "reviewed_open":
+		return "reviewed · open"
+	case "reviewed_merged":
+		return "reviewed · merged"
+	case "reviewed_closed":
+		return "reviewed · closed"
+	case "reviewed_draft":
+		return "reviewed · draft"
+	case "reviewed_approved":
+		return "reviewed · approved"
+	case "reviewed_changes_requested":
+		return "reviewed · changes requested"
+	case "reviewed_in_review":
+		return "reviewed · in review"
+	default:
+		return kind
+	}
+}
+
 func (g *GitHubConnector) IsTerminal(kind string) bool {
 	switch kind {
 	case "authored_merged", "authored_closed", "reviewed_merged", "reviewed_closed":
