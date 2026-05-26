@@ -15,12 +15,19 @@ import (
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
 
+// terminalKinds are PR states that will never change; skip them in refresh.
+var terminalKinds = map[string]bool{
+	"pr_merged": true,
+	"pr_closed": true,
+}
+
 type Worker struct {
-	db       *gorm.DB
-	registry *connector.Registry
-	trigger  chan string
-	interval time.Duration
-	backfill int
+	db              *gorm.DB
+	registry        *connector.Registry
+	trigger         chan string
+	interval        time.Duration
+	refreshInterval time.Duration
+	backfill        int
 }
 
 func New(database *gorm.DB, registry *connector.Registry) *Worker {
@@ -28,6 +35,13 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 	if v := os.Getenv("SYNC_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			interval = d
+		}
+	}
+
+	refreshInterval := 5 * time.Minute
+	if v := os.Getenv("STATUS_REFRESH_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			refreshInterval = d
 		}
 	}
 
@@ -39,11 +53,12 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 	}
 
 	return &Worker{
-		db:       database,
-		registry: registry,
-		trigger:  make(chan string, 10),
-		interval: interval,
-		backfill: backfill,
+		db:              database,
+		registry:        registry,
+		trigger:         make(chan string, 10),
+		interval:        interval,
+		refreshInterval: refreshInterval,
+		backfill:        backfill,
 	}
 }
 
@@ -55,8 +70,13 @@ func (w *Worker) TriggerChan() chan<- string {
 func (w *Worker) Run(ctx context.Context) {
 	w.runBackfill(ctx)
 
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
+	syncTicker := time.NewTicker(w.interval)
+	refreshTicker := time.NewTicker(w.refreshInterval)
+	defer syncTicker.Stop()
+	defer refreshTicker.Stop()
+
+	// Run an initial status refresh shortly after startup.
+	go w.refreshAllStatuses(ctx)
 
 	for {
 		select {
@@ -68,8 +88,10 @@ func (w *Worker) Run(ctx context.Context) {
 			} else {
 				w.syncOne(ctx, name, utcToday())
 			}
-		case <-ticker.C:
+		case <-syncTicker.C:
 			w.syncAll(ctx, utcToday())
+		case <-refreshTicker.C:
+			w.refreshAllStatuses(ctx)
 		}
 	}
 }
@@ -140,8 +162,52 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 
 	return w.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"title", "url", "metadata", "fetched_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"title", "url", "kind", "metadata", "fetched_at"}),
 	}).Create(&items).Error
+}
+
+// refreshAllStatuses iterates over every registered connector that implements
+// StatusRefresher and updates the kind of non-terminal activity items.
+func (w *Worker) refreshAllStatuses(ctx context.Context) {
+	for _, c := range w.registry.All() {
+		refresher, ok := c.(connector.StatusRefresher)
+		if !ok || !c.IsConfigured() {
+			continue
+		}
+
+		// Collect non-terminal external IDs for this source.
+		var items []db.ActivityItem
+		if err := w.db.
+			Where("source = ?", c.Name()).
+			Find(&items).Error; err != nil {
+			log.Printf("worker: refresh query %s: %v", c.Name(), err)
+			continue
+		}
+
+		var ids []string
+		for _, item := range items {
+			if !terminalKinds[item.Kind] {
+				ids = append(ids, item.ExternalID)
+			}
+		}
+		if len(ids) == 0 {
+			continue
+		}
+
+		updates, err := refresher.RefreshStatuses(ctx, ids)
+		if err != nil {
+			log.Printf("worker: refresh %s: %v", c.Name(), err)
+			continue
+		}
+
+		for _, u := range updates {
+			w.db.Model(&db.ActivityItem{}).
+				Where("source = ? AND external_id = ?", c.Name(), u.ExternalID).
+				Update("kind", u.Kind)
+		}
+
+		log.Printf("worker: refreshed %d %s PR statuses", len(updates), c.Name())
+	}
 }
 
 func utcToday() time.Time {
