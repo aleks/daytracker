@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { api } from '../api'
 import type { Task } from '../types'
 
@@ -17,6 +17,11 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const editInputRef = useRef<HTMLInputElement>(null)
+  const addInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    addInputRef.current?.focus()
+  }, [date])
 
   const add = async () => {
     const title = newTitle.trim()
@@ -26,6 +31,7 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
       const task = await api.createTask(date, title)
       onChanged([...tasks, task])
       setNewTitle('')
+      addInputRef.current?.focus()
     } catch (err) {
       console.error('add task:', err)
     } finally {
@@ -103,12 +109,13 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
     <div class="task-list">
       <div class="task-add">
         <input
+          ref={addInputRef}
           type="text"
+          tabIndex={1}
           placeholder="Add a task…"
           value={newTitle}
           onInput={e => setNewTitle((e.target as HTMLInputElement).value)}
           onKeyDown={e => e.key === 'Enter' && add()}
-          disabled={adding}
         />
         <button onClick={add} disabled={adding || !newTitle.trim()}>Add</button>
       </div>
