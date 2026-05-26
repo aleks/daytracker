@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
+
+var urlRE = regexp.MustCompile(`https?://\S+`)
 
 // Writer writes daily markdown snapshots to a directory tree organised as
 // <root>/YYYY/MM/DD.md.
@@ -80,7 +83,7 @@ func render(date time.Time, tasks []db.Task, activities []db.ActivityItem) strin
 			if t.Done {
 				mark = "x"
 			}
-			fmt.Fprintf(&b, "- [%s] %s\n", mark, t.Title)
+			fmt.Fprintf(&b, "- [%s] %s\n", mark, renderTaskTitle(t.Title))
 		}
 	}
 
@@ -127,6 +130,26 @@ func sectionTitle(source string) string {
 		}
 		return strings.ToUpper(source[:1]) + source[1:]
 	}
+}
+
+// renderTaskTitle replaces bare URLs with numbered markdown links so the
+// plain text remains readable without long URLs cluttering the line.
+func renderTaskTitle(title string) string {
+	urls := urlRE.FindAllString(title, -1)
+	if len(urls) == 0 {
+		return title
+	}
+	text := strings.TrimSpace(urlRE.ReplaceAllString(title, ""))
+	var sb strings.Builder
+	sb.WriteString(text)
+	for i, u := range urls {
+		label := "Open link"
+		if len(urls) > 1 {
+			label = fmt.Sprintf("Open link %d", i+1)
+		}
+		fmt.Fprintf(&sb, " [%s](%s)", label, u)
+	}
+	return sb.String()
 }
 
 func kindLabel(kind string) string {
