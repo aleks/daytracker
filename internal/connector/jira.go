@@ -42,6 +42,19 @@ func (j *JiraConnector) IsConfigured() bool {
 	return j.baseURL != "" && j.email != "" && j.token != ""
 }
 
+func (j *JiraConnector) KindLabel(kind string) string {
+	switch kind {
+	case "jira_todo":
+		return "to do"
+	case "jira_in_progress":
+		return "in progress"
+	case "jira_done":
+		return "done"
+	default:
+		return kind
+	}
+}
+
 // apiBase returns the Atlassian API gateway base URL for this cloud instance.
 // Atlassian requires routing through api.atlassian.com rather than the tenant
 // hostname when using API tokens.

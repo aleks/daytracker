@@ -74,6 +74,8 @@ type Connector interface {
     Name() string
     IsConfigured() bool
     Fetch(ctx context.Context, date time.Time) ([]db.ActivityItem, error)
+    // KindLabel returns a human-readable label for the given kind string.
+    KindLabel(kind string) string
 }
 ```
 
@@ -114,7 +116,7 @@ Kinds are `<source>_<state>` strings stored in `ActivityItem.Kind`. They drive b
 - Jira: `jira_todo`, `jira_in_progress`, `jira_done`
 - Confluence: `confluence_created`, `confluence_edited`
 
-When adding a new kind, also update `kindLabel()` in `internal/backup/backup.go` and the badge mapping in `web/src/components/ActivityList.tsx`.
+When adding a new kind, also update `KindLabel()` on the connector and the badge mapping in `web/src/components/ActivityList.tsx`. The backup writer calls `connector.KindLabel()` directly — there is no central `kindLabel` function to update.
 
 ## Worker (`internal/worker/worker.go`)
 

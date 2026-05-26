@@ -12,6 +12,9 @@ type Connector interface {
 	Name() string
 	IsConfigured() bool
 	Fetch(ctx context.Context, date time.Time) ([]db.ActivityItem, error)
+	// KindLabel returns a human-readable label for the given kind string.
+	// Falls back to returning kind unchanged for unrecognised values.
+	KindLabel(kind string) string
 }
 
 // PRStatusItem carries the external ID and current kind of an item to refresh.

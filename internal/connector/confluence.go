@@ -49,6 +49,19 @@ func (c *ConfluenceConnector) IsConfigured() bool {
 	return c.baseURL != "" && c.email != "" && c.token != ""
 }
 
+func (c *ConfluenceConnector) KindLabel(kind string) string {
+	switch kind {
+	case "confluence_created":
+		return "created"
+	case "confluence_edited":
+		return "edited"
+	case "confluence_commented":
+		return "commented"
+	default:
+		return kind
+	}
+}
+
 func (c *ConfluenceConnector) apiBase(ctx context.Context) (string, error) {
 	c.cloudIDOnce.Do(func() {
 		c.cloudID, c.cloudIDErr = c.resolveCloudID(ctx)
