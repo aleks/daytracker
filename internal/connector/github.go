@@ -15,15 +15,18 @@ import (
 // GitHubConnector fetches PRs authored or reviewed by the current user.
 type GitHubConnector struct {
 	username string // resolved lazily on first Fetch
+	ghRunner func(ctx context.Context, args ...string) ([]byte, error)
 }
 
-func NewGitHub() *GitHubConnector { return &GitHubConnector{} }
+func NewGitHub() *GitHubConnector {
+	return &GitHubConnector{ghRunner: runGH}
+}
 
 func (g *GitHubConnector) resolveUsername(ctx context.Context) error {
 	if g.username != "" {
 		return nil
 	}
-	out, err := runGH(ctx, "api", "user", "--jq", ".login")
+	out, err := g.ghRunner(ctx, "api", "user", "--jq", ".login")
 	if err != nil {
 		return fmt.Errorf("github: resolve username: %w", err)
 	}
@@ -61,12 +64,12 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 
 	dateStr := date.Format("2006-01-02")
 
-	authored, err := searchPRs(ctx, "--author", "@me", "--created", dateStr)
+	authored, err := g.searchPRs(ctx, "--author", "@me", "--created", dateStr)
 	if err != nil {
 		return nil, fmt.Errorf("github fetch authored: %w", err)
 	}
 
-	reviewed, err := searchPRs(ctx, "--reviewed-by", "@me", "--updated", dateStr)
+	reviewed, err := g.searchPRs(ctx, "--reviewed-by", "@me", "--updated", dateStr)
 	if err != nil {
 		return nil, fmt.Errorf("github fetch reviewed: %w", err)
 	}
@@ -111,13 +114,13 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	return items, nil
 }
 
-func searchPRs(ctx context.Context, extraArgs ...string) ([]ghSearchPR, error) {
+func (g *GitHubConnector) searchPRs(ctx context.Context, extraArgs ...string) ([]ghSearchPR, error) {
 	args := append([]string{"search", "prs",
 		"--json", "number,title,url,state,isDraft,author,repository",
 		"--limit", "100",
 	}, extraArgs...)
 
-	out, err := runGH(ctx, args...)
+	out, err := g.ghRunner(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +174,7 @@ func (g *GitHubConnector) RefreshStatuses(ctx context.Context, items []PRStatusI
 			continue
 		}
 
-		out, err := runGH(ctx, "pr", "view", number,
+		out, err := g.ghRunner(ctx, "pr", "view", number,
 			"--repo", owner,
 			"--json", "number,state,isDraft,reviewDecision,mergedAt",
 		)
