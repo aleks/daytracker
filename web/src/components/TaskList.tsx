@@ -13,6 +13,7 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [adding, setAdding] = useState(false)
   const [copying, setCopying] = useState<number | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -82,6 +83,7 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
   }
 
   const remove = async (task: Task) => {
+    setPendingDeleteId(null)
     const optimistic = tasks.filter(t => t.id !== task.id)
     onChanged(optimistic)
     try {
@@ -149,7 +151,15 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
                 {copying === task.id ? '…' : '↑ today'}
               </button>
             )}
-            <button class="task-delete" onClick={() => remove(task)} title="Delete">×</button>
+            {pendingDeleteId === task.id ? (
+              <span class="task-delete-confirm">
+                <span class="task-delete-label">Delete?</span>
+                <button class="task-delete-yes" onClick={() => remove(task)}>Yes</button>
+                <button class="task-delete-no" onClick={() => setPendingDeleteId(null)}>No</button>
+              </span>
+            ) : (
+              <button class="task-delete" onClick={() => setPendingDeleteId(task.id)} title="Delete">×</button>
+            )}
           </li>
         ))}
       </ul>
