@@ -29,6 +29,9 @@ type PRStatusUpdate struct {
 // StatusRefresher is an optional capability a Connector may implement to update
 // the live status of previously-fetched items (e.g. PR open → merged).
 type StatusRefresher interface {
+	// IsTerminal reports whether the given kind string represents a state that
+	// can never change, so the worker can skip those items during refresh.
+	IsTerminal(kind string) bool
 	// RefreshStatuses accepts items that are not yet in a terminal state.
 	// CurrentKind is provided so implementations can preserve role prefixes
 	// (e.g. "authored_open" → "authored_merged") when updating state.

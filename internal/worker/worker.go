@@ -17,14 +17,6 @@ import (
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
 
-// terminalKinds are PR states that will never change; skip them in refresh.
-var terminalKinds = map[string]bool{
-	"authored_merged": true,
-	"authored_closed": true,
-	"reviewed_merged": true,
-	"reviewed_closed": true,
-}
-
 type Worker struct {
 	db              *gorm.DB
 	registry        *connector.Registry
@@ -248,7 +240,7 @@ func (w *Worker) refreshAllStatuses(ctx context.Context) {
 		rowByExternalID := make(map[string]uint, len(items))
 		var pending []connector.PRStatusItem
 		for _, item := range items {
-			if !terminalKinds[item.Kind] {
+			if !refresher.IsTerminal(item.Kind) {
 				rowByExternalID[item.ExternalID] = item.ID
 				pending = append(pending, connector.PRStatusItem{
 					ExternalID:  item.ExternalID,

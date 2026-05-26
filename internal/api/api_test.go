@@ -71,6 +71,10 @@ func TestDayList_ReturnsDays(t *testing.T) {
 	database, router := newTestRouter(t)
 	day := db.Day{Date: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)}
 	require.NoError(t, database.Create(&day).Error)
+	// A bare Day row without tasks or activities is excluded by the WHERE EXISTS
+	// filter, so seed at least one task to make the day visible.
+	task := db.Task{DayID: day.ID, Title: "test task"}
+	require.NoError(t, database.Create(&task).Error)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/days", nil)

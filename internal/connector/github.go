@@ -38,6 +38,14 @@ func (g *GitHubConnector) Name() string { return "github" }
 
 func (g *GitHubConnector) IsConfigured() bool { return g.token != "" }
 
+func (g *GitHubConnector) IsTerminal(kind string) bool {
+	switch kind {
+	case "authored_merged", "authored_closed", "reviewed_merged", "reviewed_closed":
+		return true
+	}
+	return false
+}
+
 func (g *GitHubConnector) resolveUsername(ctx context.Context) (string, error) {
 	g.usernameOnce.Do(func() {
 		data, err := g.graphql(ctx, `query { viewer { login } }`, nil)
