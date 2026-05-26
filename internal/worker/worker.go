@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/aleksmaksimow/daytracker/internal/backup"
 	"github.com/aleksmaksimow/daytracker/internal/connector"
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
@@ -27,6 +28,7 @@ var terminalKinds = map[string]bool{
 type Worker struct {
 	db              *gorm.DB
 	registry        *connector.Registry
+	backup          *backup.Writer
 	trigger         chan string
 	interval        time.Duration
 	refreshInterval time.Duration
@@ -55,9 +57,16 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 		}
 	}
 
+	var bw *backup.Writer
+	if root := os.Getenv("DAYTRACKER_BACKUP_DIR"); root != "" {
+		bw = backup.New(root, database)
+		log.Printf("worker: backup dir=%s", root)
+	}
+
 	w := &Worker{
 		db:              database,
 		registry:        registry,
+		backup:          bw,
 		trigger:         make(chan string, 10),
 		interval:        interval,
 		refreshInterval: refreshInterval,
@@ -80,8 +89,12 @@ func (w *Worker) Run(ctx context.Context) {
 
 	syncTicker := time.NewTicker(w.interval)
 	refreshTicker := time.NewTicker(w.refreshInterval)
+	// Re-write today's backup file on a short cycle so task edits (done/undone)
+	// are reflected without waiting for the next full connector sync.
+	backupTicker := time.NewTicker(2 * time.Minute)
 	defer syncTicker.Stop()
 	defer refreshTicker.Stop()
+	defer backupTicker.Stop()
 
 	// Run an initial status refresh shortly after startup.
 	var refreshWg sync.WaitGroup
@@ -97,15 +110,21 @@ func (w *Worker) Run(ctx context.Context) {
 			refreshWg.Wait()
 			return
 		case name := <-w.trigger:
+			today := utcToday()
 			if name == "" {
-				w.syncAll(ctx, utcToday())
+				w.syncAll(ctx, today)
 			} else {
-				w.syncOne(ctx, name, utcToday())
+				w.syncOne(ctx, name, today)
 			}
+			w.writeBackup(ctx, today)
 		case <-syncTicker.C:
-			w.syncAll(ctx, utcToday())
+			today := utcToday()
+			w.syncAll(ctx, today)
+			w.writeBackup(ctx, today)
 		case <-refreshTicker.C:
 			w.refreshAllStatuses(ctx)
+		case <-backupTicker.C:
+			w.writeBackup(ctx, utcToday())
 		}
 	}
 }
@@ -120,8 +139,18 @@ func (w *Worker) runBackfill(ctx context.Context) {
 		}
 		date := today.AddDate(0, 0, -i)
 		w.syncAll(ctx, date)
+		w.writeBackup(ctx, date)
 	}
 	log.Printf("worker: backfill complete")
+}
+
+func (w *Worker) writeBackup(ctx context.Context, date time.Time) {
+	if w.backup == nil {
+		return
+	}
+	if err := w.backup.WriteDay(ctx, date); err != nil {
+		log.Printf("worker: backup %s: %v", date.Format("2006-01-02"), err)
+	}
 }
 
 func (w *Worker) syncAll(ctx context.Context, date time.Time) {
@@ -187,7 +216,7 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 	}
 
 	return w.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}},
+		Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}, {Name: "day_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"title", "url", "kind", "metadata", "fetched_at"}),
 	}).Create(&rows).Error
 }
@@ -214,9 +243,13 @@ func (w *Worker) refreshAllStatuses(ctx context.Context) {
 			continue
 		}
 
+		// Build a map from external_id to row ID so we can update the specific
+		// row rather than all rows for that ticket across days.
+		rowByExternalID := make(map[string]uint, len(items))
 		var pending []connector.PRStatusItem
 		for _, item := range items {
 			if !terminalKinds[item.Kind] {
+				rowByExternalID[item.ExternalID] = item.ID
 				pending = append(pending, connector.PRStatusItem{
 					ExternalID:  item.ExternalID,
 					CurrentKind: item.Kind,
@@ -234,9 +267,11 @@ func (w *Worker) refreshAllStatuses(ctx context.Context) {
 		}
 
 		for _, u := range updates {
-			w.db.Model(&db.ActivityItem{}).
-				Where("source = ? AND external_id = ?", c.Name(), u.ExternalID).
-				Update("kind", u.Kind)
+			if id, ok := rowByExternalID[u.ExternalID]; ok {
+				w.db.Model(&db.ActivityItem{}).
+					Where("id = ?", id).
+					Update("kind", u.Kind)
+			}
 		}
 
 		log.Printf("worker: refreshed %d %s PR statuses", len(updates), c.Name())
