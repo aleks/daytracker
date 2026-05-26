@@ -334,6 +334,50 @@ func TestHealth(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+// ── DayHandler.List ordering and filtering ────────────────────────────────────
+
+func TestDayList_OrderedByDateDesc(t *testing.T) {
+	database, router := newTestRouter(t)
+
+	// Create two days out of chronological order.
+	older := db.Day{Date: time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC)}
+	require.NoError(t, database.Create(&older).Error)
+	require.NoError(t, database.Create(&db.Task{DayID: older.ID, Title: "older task"}).Error)
+
+	newer := db.Day{Date: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)}
+	require.NoError(t, database.Create(&newer).Error)
+	require.NoError(t, database.Create(&db.Task{DayID: newer.ID, Title: "newer task"}).Error)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/days", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var days []db.Day
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &days))
+	require.Len(t, days, 2)
+	// Newest date must come first.
+	assert.True(t, days[0].Date.After(days[1].Date),
+		"expected days sorted newest-first, got %v then %v", days[0].Date, days[1].Date)
+}
+
+func TestDayList_ExcludesEmptyDays(t *testing.T) {
+	database, router := newTestRouter(t)
+
+	// A bare Day row with no task or activity should not appear in the list.
+	bare := db.Day{Date: time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)}
+	require.NoError(t, database.Create(&bare).Error)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/days", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var days []db.Day
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &days))
+	assert.Empty(t, days)
+}
+
 // ── CORS middleware ───────────────────────────────────────────────────────────
 
 func TestCORS_Preflight(t *testing.T) {
