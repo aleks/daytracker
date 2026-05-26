@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	daytracker "github.com/aleksmaksimow/daytracker"
 	"github.com/aleksmaksimow/daytracker/internal/api"
 	"github.com/aleksmaksimow/daytracker/internal/connector"
 	"github.com/aleksmaksimow/daytracker/internal/db"
@@ -24,7 +24,7 @@ func main() {
 	}
 
 	registry := connector.NewRegistry()
-	// Connectors will be registered here as they are implemented.
+	// Connectors are registered here as they are implemented.
 
 	w := worker.New(database, registry)
 
@@ -33,14 +33,7 @@ func main() {
 		port = "8080"
 	}
 
-	var webFS fs.FS
-	// In production the embedded FS is used; in dev (ENV=dev) it is nil
-	// so the Vite dev server handles the frontend.
-	if os.Getenv("ENV") != "dev" {
-		webFS = embeddedFS()
-	}
-
-	router := api.NewRouter(database, webFS, w.TriggerChan())
+	router := api.NewRouter(database, daytracker.WebFS(), w.TriggerChan())
 
 	srv := &http.Server{
 		Addr:    ":" + port,

@@ -1,0 +1,90 @@
+import { useState } from 'preact/hooks'
+import { api } from '../api'
+import type { Task } from '../types'
+
+interface Props {
+  date: string
+  tasks: Task[]
+  onChanged: (tasks: Task[]) => void
+}
+
+export function TaskList({ date, tasks, onChanged }: Props) {
+  const [newTitle, setNewTitle] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  const add = async () => {
+    const title = newTitle.trim()
+    if (!title) return
+    setAdding(true)
+    try {
+      const task = await api.createTask(date, title)
+      onChanged([...tasks, task])
+      setNewTitle('')
+    } catch (err) {
+      console.error('add task:', err)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const toggle = async (task: Task) => {
+    const optimistic = tasks.map(t => t.id === task.id ? { ...t, done: !t.done } : t)
+    onChanged(optimistic)
+    try {
+      await api.updateTask(task.id, { done: !task.done })
+    } catch (err) {
+      console.error('toggle task:', err)
+      onChanged(tasks)
+    }
+  }
+
+  const remove = async (task: Task) => {
+    const optimistic = tasks.filter(t => t.id !== task.id)
+    onChanged(optimistic)
+    try {
+      await api.deleteTask(task.id)
+    } catch (err) {
+      console.error('delete task:', err)
+      onChanged(tasks)
+    }
+  }
+
+  const sorted = [...tasks].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1
+    return a.id - b.id
+  })
+
+  return (
+    <div class="task-list">
+      <div class="task-add">
+        <input
+          type="text"
+          placeholder="Add a task…"
+          value={newTitle}
+          onInput={e => setNewTitle((e.target as HTMLInputElement).value)}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          disabled={adding}
+        />
+        <button onClick={add} disabled={adding || !newTitle.trim()}>Add</button>
+      </div>
+
+      {sorted.length === 0 && (
+        <p class="task-empty">No tasks yet.</p>
+      )}
+
+      <ul class="task-items">
+        {sorted.map(task => (
+          <li key={task.id} class={task.done ? 'task-item done' : 'task-item'}>
+            <input
+              type="checkbox"
+              checked={task.done}
+              onChange={() => toggle(task)}
+            />
+            <span class="task-title">{task.title}</span>
+            <button class="task-delete" onClick={() => remove(task)} title="Delete">×</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
