@@ -86,22 +86,24 @@ func boolStr(b bool) string {
 
 func TestPRStateFromDetail(t *testing.T) {
 	tests := []struct {
-		name   string
-		detail ghPRDetail
-		want   string
+		name           string
+		state          string
+		isDraft        bool
+		reviewDecision string
+		want           string
 	}{
-		{"merged", ghPRDetail{State: "MERGED"}, "merged"},
-		{"closed", ghPRDetail{State: "CLOSED"}, "closed"},
-		{"draft", ghPRDetail{State: "OPEN", IsDraft: true}, "draft"},
-		{"approved", ghPRDetail{State: "OPEN", ReviewDecision: "APPROVED"}, "approved"},
-		{"changes_requested", ghPRDetail{State: "OPEN", ReviewDecision: "CHANGES_REQUESTED"}, "changes_requested"},
-		{"in_review", ghPRDetail{State: "OPEN", ReviewDecision: "REVIEW_REQUIRED"}, "in_review"},
-		{"open_no_review", ghPRDetail{State: "OPEN", ReviewDecision: ""}, "open"},
-		{"open_unknown_review", ghPRDetail{State: "OPEN", ReviewDecision: "SOMETHING_ELSE"}, "open"},
+		{"merged", "MERGED", false, "", "merged"},
+		{"closed", "CLOSED", false, "", "closed"},
+		{"draft", "OPEN", true, "", "draft"},
+		{"approved", "OPEN", false, "APPROVED", "approved"},
+		{"changes_requested", "OPEN", false, "CHANGES_REQUESTED", "changes_requested"},
+		{"in_review", "OPEN", false, "REVIEW_REQUIRED", "in_review"},
+		{"open_no_review", "OPEN", false, "", "open"},
+		{"open_unknown_review", "OPEN", false, "SOMETHING_ELSE", "open"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, prStateFromDetail(tc.detail))
+			assert.Equal(t, tc.want, prStateFromDetail(tc.state, tc.isDraft, tc.reviewDecision))
 		})
 	}
 }
@@ -135,20 +137,6 @@ func TestParseExternalID_RepoWithHash(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "org/repo", repo)
 	assert.Equal(t, "123", num)
-}
-
-// ── GitHub: prKindFromSearch ──────────────────────────────────────────────────
-
-func TestPRKindFromSearch(t *testing.T) {
-	pr := ghSearchPR{State: "open", IsDraft: false}
-	assert.Equal(t, "authored_open", prKindFromSearch(pr, "authored"))
-	assert.Equal(t, "reviewed_open", prKindFromSearch(pr, "reviewed"))
-
-	merged := ghSearchPR{State: "merged"}
-	assert.Equal(t, "authored_merged", prKindFromSearch(merged, "authored"))
-
-	draft := ghSearchPR{State: "open", IsDraft: true}
-	assert.Equal(t, "reviewed_draft", prKindFromSearch(draft, "reviewed"))
 }
 
 // ── Jira: jiraKind ────────────────────────────────────────────────────────────

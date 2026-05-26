@@ -35,7 +35,7 @@ func checkGitHub(ctx context.Context) {
 	fmt.Println("=== github ===")
 	c := connector.NewGitHub()
 	if !c.IsConfigured() {
-		fmt.Println("  not configured — run: gh auth login")
+		fmt.Println("  not configured — set DAYTRACKER_GITHUB_TOKEN")
 		fmt.Println()
 		return
 	}
