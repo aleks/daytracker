@@ -151,7 +151,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-sm);
   margin: 0 calc(-1 * var(--space-sm));
   border-radius: var(--radius);
   transition: background 0.1s;
