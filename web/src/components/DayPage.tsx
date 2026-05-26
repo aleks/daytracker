@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useState } from 'preact/hooks'
 import { api } from '../api'
 import type { ActivityItem, DayDetail, Task } from '../types'
 import { ActivityList } from './ActivityList'
@@ -34,6 +34,10 @@ function offsetDate(dateStr: string, days: number): string {
 export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
   const [detail, setDetail] = useState<DayDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useLayoutEffect(() => {
+    document.title = `${formatDate(date)} — Daytracker`
+  }, [date])
 
   useEffect(() => {
     api.getDay(date)

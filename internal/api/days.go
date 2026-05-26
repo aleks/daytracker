@@ -21,7 +21,12 @@ type DayDetail struct {
 
 func (h *DayHandler) List(c *gin.Context) {
 	var days []db.Day
-	if err := h.db.Order("date desc").Find(&days).Error; err != nil {
+	err := h.db.
+		Where(`EXISTS (SELECT 1 FROM tasks WHERE tasks.day_id = days.id)
+			OR EXISTS (SELECT 1 FROM activity_items WHERE activity_items.day_id = days.id)`).
+		Order("date desc").
+		Find(&days).Error
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
