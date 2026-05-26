@@ -14,6 +14,12 @@ type Connector interface {
 	Fetch(ctx context.Context, date time.Time) ([]db.ActivityItem, error)
 }
 
+// PRStatusItem carries the external ID and current kind of an item to refresh.
+type PRStatusItem struct {
+	ExternalID  string
+	CurrentKind string
+}
+
 // PRStatusUpdate pairs an external ID with its refreshed kind string.
 type PRStatusUpdate struct {
 	ExternalID string
@@ -23,9 +29,10 @@ type PRStatusUpdate struct {
 // StatusRefresher is an optional capability a Connector may implement to update
 // the live status of previously-fetched items (e.g. PR open → merged).
 type StatusRefresher interface {
-	// RefreshStatuses accepts external IDs of items that are not yet in a
-	// terminal state and returns updated kind values for each one.
-	RefreshStatuses(ctx context.Context, externalIDs []string) ([]PRStatusUpdate, error)
+	// RefreshStatuses accepts items that are not yet in a terminal state.
+	// CurrentKind is provided so implementations can preserve role prefixes
+	// (e.g. "authored_open" → "authored_merged") when updating state.
+	RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error)
 }
 
 // Registry holds all registered connectors.

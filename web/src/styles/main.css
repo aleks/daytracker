@@ -283,6 +283,22 @@ body {
   margin-bottom: var(--space-xs);
 }
 
+.activity-subgroup {
+  margin-bottom: var(--space-sm);
+}
+
+.activity-subgroup:last-child {
+  margin-bottom: 0;
+}
+
+.activity-subgroup-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
+  padding-left: var(--space-xs);
+}
+
 .activity-items {
   list-style: none;
   display: flex;

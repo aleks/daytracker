@@ -188,17 +188,20 @@ func (w *Worker) refreshAllStatuses(ctx context.Context) {
 			continue
 		}
 
-		var ids []string
+		var pending []connector.PRStatusItem
 		for _, item := range items {
 			if !terminalKinds[item.Kind] {
-				ids = append(ids, item.ExternalID)
+				pending = append(pending, connector.PRStatusItem{
+					ExternalID:  item.ExternalID,
+					CurrentKind: item.Kind,
+				})
 			}
 		}
-		if len(ids) == 0 {
+		if len(pending) == 0 {
 			continue
 		}
 
-		updates, err := refresher.RefreshStatuses(ctx, ids)
+		updates, err := refresher.RefreshStatuses(ctx, pending)
 		if err != nil {
 			log.Printf("worker: refresh %s: %v", c.Name(), err)
 			continue
