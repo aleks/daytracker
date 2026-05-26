@@ -1,0 +1,162 @@
+package connector
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/aleksmaksimow/daytracker/internal/db"
+)
+
+// ── Registry ──────────────────────────────────────────────────────────────────
+
+type stubConnector struct{ name string }
+
+func (s *stubConnector) Name() string                                              { return s.name }
+func (s *stubConnector) IsConfigured() bool                                        { return true }
+func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem, error) {
+	return nil, nil
+}
+
+func TestRegistry_RegisterAndAll(t *testing.T) {
+	r := NewRegistry()
+	r.Register(&stubConnector{"github"})
+	r.Register(&stubConnector{"jira"})
+	all := r.All()
+	require.Len(t, all, 2)
+	assert.Equal(t, "github", all[0].Name())
+	assert.Equal(t, "jira", all[1].Name())
+}
+
+func TestRegistry_Get_Found(t *testing.T) {
+	r := NewRegistry()
+	r.Register(&stubConnector{"github"})
+	c, ok := r.Get("github")
+	require.True(t, ok)
+	assert.Equal(t, "github", c.Name())
+}
+
+func TestRegistry_Get_NotFound(t *testing.T) {
+	r := NewRegistry()
+	_, ok := r.Get("missing")
+	assert.False(t, ok)
+}
+
+func TestRegistry_Empty(t *testing.T) {
+	r := NewRegistry()
+	assert.Empty(t, r.All())
+}
+
+// ── GitHub: prState ───────────────────────────────────────────────────────────
+
+func TestPRState(t *testing.T) {
+	tests := []struct {
+		state   string
+		isDraft bool
+		want    string
+	}{
+		{"MERGED", false, "merged"},
+		{"merged", false, "merged"},
+		{"CLOSED", false, "closed"},
+		{"closed", false, "closed"},
+		{"OPEN", true, "draft"},
+		{"open", true, "draft"},
+		{"OPEN", false, "open"},
+		{"open", false, "open"},
+		{"", false, "open"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.state+"_draft="+boolStr(tc.isDraft), func(t *testing.T) {
+			assert.Equal(t, tc.want, prState(tc.state, tc.isDraft))
+		})
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// ── GitHub: prStateFromDetail ─────────────────────────────────────────────────
+
+func TestPRStateFromDetail(t *testing.T) {
+	tests := []struct {
+		name   string
+		detail ghPRDetail
+		want   string
+	}{
+		{"merged", ghPRDetail{State: "MERGED"}, "merged"},
+		{"closed", ghPRDetail{State: "CLOSED"}, "closed"},
+		{"draft", ghPRDetail{State: "OPEN", IsDraft: true}, "draft"},
+		{"approved", ghPRDetail{State: "OPEN", ReviewDecision: "APPROVED"}, "approved"},
+		{"changes_requested", ghPRDetail{State: "OPEN", ReviewDecision: "CHANGES_REQUESTED"}, "changes_requested"},
+		{"in_review", ghPRDetail{State: "OPEN", ReviewDecision: "REVIEW_REQUIRED"}, "in_review"},
+		{"open_no_review", ghPRDetail{State: "OPEN", ReviewDecision: ""}, "open"},
+		{"open_unknown_review", ghPRDetail{State: "OPEN", ReviewDecision: "SOMETHING_ELSE"}, "open"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, prStateFromDetail(tc.detail))
+		})
+	}
+}
+
+// ── GitHub: roleFromKind ──────────────────────────────────────────────────────
+
+func TestRoleFromKind(t *testing.T) {
+	assert.Equal(t, "authored", roleFromKind("authored_open"))
+	assert.Equal(t, "reviewed", roleFromKind("reviewed_merged"))
+	assert.Equal(t, "authored", roleFromKind("nounderscore"))
+	assert.Equal(t, "authored", roleFromKind(""))
+}
+
+// ── GitHub: parseExternalID ───────────────────────────────────────────────────
+
+func TestParseExternalID(t *testing.T) {
+	repo, num, ok := parseExternalID("owner/repo#42")
+	require.True(t, ok)
+	assert.Equal(t, "owner/repo", repo)
+	assert.Equal(t, "42", num)
+}
+
+func TestParseExternalID_NoHash(t *testing.T) {
+	_, _, ok := parseExternalID("owner/repo")
+	assert.False(t, ok)
+}
+
+func TestParseExternalID_RepoWithHash(t *testing.T) {
+	// Last # is the separator — repo name can't contain # but safety check.
+	repo, num, ok := parseExternalID("org/repo#123")
+	require.True(t, ok)
+	assert.Equal(t, "org/repo", repo)
+	assert.Equal(t, "123", num)
+}
+
+// ── GitHub: prKindFromSearch ──────────────────────────────────────────────────
+
+func TestPRKindFromSearch(t *testing.T) {
+	pr := ghSearchPR{State: "open", IsDraft: false}
+	assert.Equal(t, "authored_open", prKindFromSearch(pr, "authored"))
+	assert.Equal(t, "reviewed_open", prKindFromSearch(pr, "reviewed"))
+
+	merged := ghSearchPR{State: "merged"}
+	assert.Equal(t, "authored_merged", prKindFromSearch(merged, "authored"))
+
+	draft := ghSearchPR{State: "open", IsDraft: true}
+	assert.Equal(t, "reviewed_draft", prKindFromSearch(draft, "reviewed"))
+}
+
+// ── Jira: jiraKind ────────────────────────────────────────────────────────────
+
+func TestJiraKind(t *testing.T) {
+	assert.Equal(t, "jira_done", jiraKind("done"))
+	assert.Equal(t, "jira_in_progress", jiraKind("indeterminate"))
+	assert.Equal(t, "jira_todo", jiraKind("new"))
+	assert.Equal(t, "jira_todo", jiraKind(""))
+	assert.Equal(t, "jira_todo", jiraKind("unknown"))
+}
