@@ -149,3 +149,66 @@ func TestJiraKind(t *testing.T) {
 	assert.Equal(t, "jira_todo", jiraKind(""))
 	assert.Equal(t, "jira_todo", jiraKind("unknown"))
 }
+
+// ── KindLabel: GitHub ─────────────────────────────────────────────────────────
+
+func TestGitHub_KindLabel(t *testing.T) {
+	g := NewGitHub()
+	tests := []struct {
+		kind string
+		want string
+	}{
+		{"authored_open", "open"},
+		{"authored_merged", "merged"},
+		{"authored_closed", "closed"},
+		{"authored_draft", "draft"},
+		{"reviewed_open", "reviewed · open"},
+		{"reviewed_approved", "reviewed · approved"},
+		{"unknown_kind", "unknown_kind"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.kind, func(t *testing.T) {
+			assert.Equal(t, tc.want, g.KindLabel(tc.kind))
+		})
+	}
+}
+
+// ── KindLabel: Jira ───────────────────────────────────────────────────────────
+
+func TestJira_KindLabel(t *testing.T) {
+	j := NewJira()
+	tests := []struct {
+		kind string
+		want string
+	}{
+		{"jira_todo", "to do"},
+		{"jira_in_progress", "in progress"},
+		{"jira_done", "done"},
+		{"unknown_kind", "unknown_kind"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.kind, func(t *testing.T) {
+			assert.Equal(t, tc.want, j.KindLabel(tc.kind))
+		})
+	}
+}
+
+// ── KindLabel: Confluence ─────────────────────────────────────────────────────
+
+func TestConfluence_KindLabel(t *testing.T) {
+	c := NewConfluence()
+	tests := []struct {
+		kind string
+		want string
+	}{
+		{"confluence_created", "created"},
+		{"confluence_edited", "edited"},
+		{"confluence_commented", "commented"},
+		{"unknown_kind", "unknown_kind"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.kind, func(t *testing.T) {
+			assert.Equal(t, tc.want, c.KindLabel(tc.kind))
+		})
+	}
+}
