@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'preact/hooks'
 import { api } from '../api'
-import type { DayDetail, Task } from '../types'
+import type { ActivityItem, DayDetail, Task } from '../types'
 import { ActivityList } from './ActivityList'
 import { TaskList } from './TaskList'
+
+const SOURCE_ORDER = ['github', 'jira', 'confluence'] as const
+const SOURCE_LABELS: Record<string, string> = {
+  github: 'GitHub',
+  jira: 'Jira',
+  confluence: 'Confluence',
+}
 
 interface Props {
   date: string
@@ -70,10 +77,23 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
             />
           </div>
 
-          <div class="day-section">
-            <h3 class="section-heading">Activity</h3>
-            <ActivityList activities={detail.activities} />
-          </div>
+          {(() => {
+            const bySource = detail.activities.reduce<Record<string, ActivityItem[]>>((acc, item) => {
+              ;(acc[item.source] ??= []).push(item)
+              return acc
+            }, {})
+            const sources = [
+              ...SOURCE_ORDER.filter(s => bySource[s]),
+              ...Object.keys(bySource).filter(s => !SOURCE_ORDER.includes(s as typeof SOURCE_ORDER[number])),
+            ]
+            if (sources.length === 0) return null
+            return sources.map(source => (
+              <div key={source} class="day-section">
+                <h3 class="section-heading">{SOURCE_LABELS[source] ?? source}</h3>
+                <ActivityList activities={bySource[source]} source={source} />
+              </div>
+            ))
+          })()}
         </div>
       )}
     </section>
