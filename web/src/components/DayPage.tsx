@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from 'preact/hooks'
 import { api } from '../api'
+import { localToday } from '../date'
 import type { ActivityItem, DayDetail, Task } from '../types'
 import { ActivityList } from './ActivityList'
 import { TaskList } from './TaskList'
@@ -56,7 +57,7 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
         <div class="day-nav-group">
           <button class="day-nav" onClick={() => onNavigate?.(offsetDate(date, -1))} aria-label="Previous day">‹</button>
           {!isToday && (
-            <button class="day-nav day-nav--today" onClick={() => onNavigate?.(new Date().toISOString().slice(0, 10))}>today</button>
+            <button class="day-nav day-nav--today" onClick={() => onNavigate?.(localToday())}>today</button>
           )}
           <button class="day-nav" onClick={() => onNavigate?.(offsetDate(date, 1))} aria-label="Next day">›</button>
         </div>
@@ -74,7 +75,7 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
               tasks={detail.tasks}
               onChanged={handleTasksChanged}
               onCopyToToday={!isToday ? async (title) => {
-                const today = new Date().toISOString().slice(0, 10)
+                const today = localToday()
                 await api.createTask(today, title)
                 onTodayChanged?.()
               } : undefined}

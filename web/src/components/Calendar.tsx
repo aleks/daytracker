@@ -1,3 +1,5 @@
+import { localToday } from '../date'
+
 interface Props {
   year: number
   month: number // 1-12
@@ -52,7 +54,7 @@ export function Calendar({ year, month, activeDates, selectedDate, onSelectDate,
   // Pad to complete the last row
   while (cells.length % 7 !== 0) cells.push(null)
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localToday()
   const todayYear = parseInt(today.slice(0, 4), 10)
   const todayMonth = parseInt(today.slice(5, 7), 10)
   const isCurrentMonth = year === todayYear && month === todayMonth
