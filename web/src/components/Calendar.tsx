@@ -53,9 +53,17 @@ export function Calendar({ year, month, activeDates, selectedDate, onSelectDate,
   while (cells.length % 7 !== 0) cells.push(null)
 
   const today = new Date().toISOString().slice(0, 10)
+  const todayYear = parseInt(today.slice(0, 4), 10)
+  const todayMonth = parseInt(today.slice(5, 7), 10)
+  const isCurrentMonth = year === todayYear && month === todayMonth
 
   const [py, pm] = prevMonth(year, month)
   const [ny, nm] = nextMonth(year, month)
+
+  const goToToday = () => {
+    onSelectDate(today)
+    onMonthChange(todayYear, todayMonth)
+  }
 
   return (
     <div class="cal">
@@ -96,6 +104,12 @@ export function Calendar({ year, month, activeDates, selectedDate, onSelectDate,
           )
         })}
       </div>
+
+      {!isCurrentMonth && (
+        <div class="cal-today-row">
+          <button class="cal-today-btn" onClick={goToToday}>Jump to today</button>
+        </div>
+      )}
     </div>
   )
 }

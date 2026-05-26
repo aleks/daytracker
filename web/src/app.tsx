@@ -67,6 +67,7 @@ export function App() {
           date={selectedDate}
           isToday={selectedDate === today}
           onTodayChanged={handleDayChanged}
+          onNavigate={handleSelectDate}
         />
       </main>
     </div>
