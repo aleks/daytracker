@@ -190,17 +190,94 @@ body {
   background: rgba(255, 255, 255, 0.7);
 }
 
+.cal-today-row {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-sm);
+}
+
+.cal-today-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.cal-today-btn:hover {
+  background: var(--color-border);
+  border-color: var(--color-accent);
+}
+
 /* ── Day page ──────────────────────────────────────────────────── */
 
 .day-page {
   margin-bottom: var(--space-xl);
 }
 
+.day-heading-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
 .day-heading {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  margin-bottom: var(--space-md);
   color: var(--color-text);
+}
+
+.day-heading--today {
+  font-weight: 800;
+}
+
+.day-nav-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.day-nav {
+  background: none;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 10px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.day-nav:last-child {
+  border-right: none;
+}
+
+.day-nav:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.day-nav--today {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  padding: 4px 8px;
+}
+
+.day-nav--today:hover {
+  background: none;
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 .day-body {

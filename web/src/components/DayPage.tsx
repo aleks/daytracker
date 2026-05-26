@@ -8,6 +8,7 @@ interface Props {
   date: string
   isToday?: boolean
   onTodayChanged?: () => void
+  onNavigate?: (date: string) => void
 }
 
 function formatDate(dateStr: string): string {
@@ -15,7 +16,15 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-export function DayPage({ date, isToday, onTodayChanged }: Props) {
+function offsetDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  const mm = (d.getMonth() + 1).toString().padStart(2, '0')
+  const dd = d.getDate().toString().padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
+export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
   const [detail, setDetail] = useState<DayDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,7 +41,16 @@ export function DayPage({ date, isToday, onTodayChanged }: Props) {
 
   return (
     <section class="day-page">
-      <h2 class="day-heading">{formatDate(date)}</h2>
+      <div class="day-heading-row">
+        <div class="day-nav-group">
+          <button class="day-nav" onClick={() => onNavigate?.(offsetDate(date, -1))} aria-label="Previous day">‹</button>
+          {!isToday && (
+            <button class="day-nav day-nav--today" onClick={() => onNavigate?.(new Date().toISOString().slice(0, 10))}>today</button>
+          )}
+          <button class="day-nav" onClick={() => onNavigate?.(offsetDate(date, 1))} aria-label="Next day">›</button>
+        </div>
+        <h2 class={`day-heading${isToday ? ' day-heading--today' : ''}`}>{formatDate(date)}</h2>
+      </div>
 
       {error && <p class="error-message">{error}</p>}
 
