@@ -310,11 +310,23 @@ body {
   text-decoration: underline;
 }
 
-.activity-kind {
+.activity-badge {
   font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  font-weight: 500;
   white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: 99px;
+  border: 1px solid transparent;
 }
+
+.activity-badge--neutral  { color: var(--color-text-muted); border-color: var(--color-border); }
+.activity-badge--open     { color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; }
+.activity-badge--draft    { color: var(--color-text-muted); border-color: var(--color-border); background: var(--color-surface); }
+.activity-badge--review   { color: #d97706; border-color: #fde68a; background: #fffbeb; }
+.activity-badge--approved { color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; font-weight: 600; }
+.activity-badge--changes  { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+.activity-badge--merged   { color: #7c3aed; border-color: #ddd6fe; background: #f5f3ff; }
+.activity-badge--closed   { color: var(--color-text-muted); border-color: var(--color-border); background: var(--color-surface); }
 
 /* ── Connector status ──────────────────────────────────────────── */
 

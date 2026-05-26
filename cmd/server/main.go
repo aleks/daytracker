@@ -24,7 +24,7 @@ func main() {
 	}
 
 	registry := connector.NewRegistry()
-	// Connectors are registered here as they are implemented.
+	registry.Register(connector.NewGitHub())
 
 	w := worker.New(database, registry)
 
