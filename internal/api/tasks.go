@@ -63,7 +63,8 @@ func (h *TaskHandler) Update(c *gin.Context) {
 	}
 
 	var body struct {
-		Done *bool `json:"done"`
+		Done  *bool   `json:"done"`
+		Title *string `json:"title"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -72,6 +73,14 @@ func (h *TaskHandler) Update(c *gin.Context) {
 
 	if body.Done != nil {
 		task.Done = *body.Done
+	}
+	if body.Title != nil {
+		trimmed := strings.TrimSpace(*body.Title)
+		if trimmed == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "title must not be blank"})
+			return
+		}
+		task.Title = trimmed
 	}
 
 	if err := h.db.Save(&task).Error; err != nil {

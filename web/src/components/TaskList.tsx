@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useRef, useState } from 'preact/hooks'
 import { api } from '../api'
 import type { Task } from '../types'
 
@@ -13,6 +13,9 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [adding, setAdding] = useState(false)
   const [copying, setCopying] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   const add = async () => {
     const title = newTitle.trim()
@@ -50,6 +53,32 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
     } finally {
       setCopying(null)
     }
+  }
+
+  const startEdit = (task: Task) => {
+    setEditingId(task.id)
+    setEditingTitle(task.title)
+    // Focus the input on the next tick after render
+    setTimeout(() => editInputRef.current?.select(), 0)
+  }
+
+  const commitEdit = async (task: Task) => {
+    const trimmed = editingTitle.trim()
+    setEditingId(null)
+    if (!trimmed || trimmed === task.title) return
+    const optimistic = tasks.map(t => t.id === task.id ? { ...t, title: trimmed } : t)
+    onChanged(optimistic)
+    try {
+      await api.updateTask(task.id, { title: trimmed })
+    } catch (err) {
+      console.error('rename task:', err)
+      onChanged(tasks)
+    }
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditingTitle('')
   }
 
   const remove = async (task: Task) => {
@@ -94,7 +123,22 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
               checked={task.done}
               onChange={() => toggle(task)}
             />
-            <span class="task-title">{task.title}</span>
+            {editingId === task.id ? (
+              <input
+                ref={editInputRef}
+                class="task-title-edit"
+                type="text"
+                value={editingTitle}
+                onInput={e => setEditingTitle((e.target as HTMLInputElement).value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitEdit(task)
+                  if (e.key === 'Escape') cancelEdit()
+                }}
+                onBlur={() => commitEdit(task)}
+              />
+            ) : (
+              <span class="task-title" onDblClick={() => startEdit(task)} title="Double-click to edit">{task.title}</span>
+            )}
             {onCopyToToday && !task.done && (
               <button
                 class="task-copy"
