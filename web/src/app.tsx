@@ -3,13 +3,10 @@ import { api } from './api'
 import { Calendar } from './components/Calendar'
 import { ConnectorStatus } from './components/ConnectorStatus'
 import { DayPage } from './components/DayPage'
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
-}
+import { localToday } from './date'
 
 export function App() {
-  const today = todayStr()
+  const today = localToday()
   const [selectedDate, setSelectedDate] = useState(today)
   const [activeDates, setActiveDates] = useState<Set<string>>(new Set())
   const [refreshKey, setRefreshKey] = useState(0)
