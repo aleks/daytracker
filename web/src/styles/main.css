@@ -151,7 +151,10 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-xs) 0;
+  padding: var(--space-xs) var(--space-sm);
+  margin: 0 calc(-1 * var(--space-sm));
+  border-radius: var(--radius);
+  transition: background 0.1s;
 }
 
 .task-item.done .task-title {
@@ -188,6 +191,10 @@ body {
 .task-copy:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.task-item:hover {
+  background: var(--color-border);
 }
 
 .task-item:hover .task-copy {
