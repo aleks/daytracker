@@ -105,20 +105,23 @@ func searchPRs(ctx context.Context, extraArgs ...string) ([]ghSearchPR, error) {
 }
 
 // prKindFromSearch derives the initial kind from a search result.
-// role is either "authored" or "reviewed".
+// Kinds are prefixed with the role: "authored_*" or "reviewed_*".
 func prKindFromSearch(pr ghSearchPR, role string) string {
-	switch {
-	case strings.EqualFold(pr.State, "merged"):
-		return "pr_merged"
-	case strings.EqualFold(pr.State, "closed"):
-		return "pr_closed"
-	case pr.IsDraft:
-		return "pr_draft"
-	case role == "reviewed":
-		return "pr_reviewed"
-	default:
-		return "pr_open"
+	return role + "_" + prState(pr.State, pr.IsDraft)
+}
+
+// prState maps raw state + isDraft to the state suffix shared by both roles.
+func prState(state string, isDraft bool) string {
+	switch strings.ToUpper(state) {
+	case "MERGED":
+		return "merged"
+	case "CLOSED":
+		return "closed"
 	}
+	if isDraft {
+		return "draft"
+	}
+	return "open"
 }
 
 // ── Status refresh ────────────────────────────────────────────────────────────
@@ -132,13 +135,13 @@ type ghPRDetail struct {
 	MergedAt       string `json:"mergedAt"`
 }
 
-// RefreshStatuses fetches current status for each supplied external ID.
-// ExternalIDs are in the form "owner/repo#number".
-func (g *GitHubConnector) RefreshStatuses(ctx context.Context, externalIDs []string) ([]PRStatusUpdate, error) {
-	updates := make([]PRStatusUpdate, 0, len(externalIDs))
+// RefreshStatuses fetches live state for each item and returns updated kinds.
+// The role prefix ("authored" / "reviewed") is preserved from CurrentKind.
+func (g *GitHubConnector) RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error) {
+	updates := make([]PRStatusUpdate, 0, len(items))
 
-	for _, id := range externalIDs {
-		owner, number, ok := parseExternalID(id)
+	for _, item := range items {
+		owner, number, ok := parseExternalID(item.ExternalID)
 		if !ok {
 			continue
 		}
@@ -148,7 +151,7 @@ func (g *GitHubConnector) RefreshStatuses(ctx context.Context, externalIDs []str
 			"--json", "number,state,isDraft,reviewDecision,mergedAt",
 		)
 		if err != nil {
-			// PR may have been deleted or repo access lost; skip silently.
+			// PR deleted or repo access lost — skip silently.
 			continue
 		}
 
@@ -157,36 +160,45 @@ func (g *GitHubConnector) RefreshStatuses(ctx context.Context, externalIDs []str
 			continue
 		}
 
+		role := roleFromKind(item.CurrentKind)
 		updates = append(updates, PRStatusUpdate{
-			ExternalID: id,
-			Kind:       prKindFromDetail(detail),
+			ExternalID: item.ExternalID,
+			Kind:       role + "_" + prStateFromDetail(detail),
 		})
 	}
 
 	return updates, nil
 }
 
-// prKindFromDetail derives a kind from a live pr view result.
-func prKindFromDetail(d ghPRDetail) string {
+// roleFromKind extracts "authored" or "reviewed" from a kind like "authored_open".
+// Falls back to "authored" if the kind has no underscore.
+func roleFromKind(kind string) string {
+	if idx := strings.Index(kind, "_"); idx >= 0 {
+		return kind[:idx]
+	}
+	return "authored"
+}
+
+// prStateFromDetail maps a live pr view result to a state suffix.
+func prStateFromDetail(d ghPRDetail) string {
 	switch strings.ToUpper(d.State) {
 	case "MERGED":
-		return "pr_merged"
+		return "merged"
 	case "CLOSED":
-		return "pr_closed"
+		return "closed"
 	}
-	// OPEN
 	if d.IsDraft {
-		return "pr_draft"
+		return "draft"
 	}
 	switch d.ReviewDecision {
 	case "APPROVED":
-		return "pr_approved"
+		return "approved"
 	case "CHANGES_REQUESTED":
-		return "pr_changes_requested"
+		return "changes_requested"
 	case "REVIEW_REQUIRED":
-		return "pr_in_review"
+		return "in_review"
 	default:
-		return "pr_open"
+		return "open"
 	}
 }
 
