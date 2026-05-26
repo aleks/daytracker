@@ -45,7 +45,7 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 		}
 	}
 
-	backfill := 7
+	backfill := 14
 	if v := os.Getenv("BACKFILL_DAYS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			backfill = n
@@ -167,18 +167,22 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 }
 
 // refreshAllStatuses iterates over every registered connector that implements
-// StatusRefresher and updates the kind of non-terminal activity items.
+// StatusRefresher and updates the kind of non-terminal activity items that fall
+// within the backfill window (i.e. the same age threshold used for fetching).
 func (w *Worker) refreshAllStatuses(ctx context.Context) {
+	cutoff := utcToday().AddDate(0, 0, -w.backfill)
+
 	for _, c := range w.registry.All() {
 		refresher, ok := c.(connector.StatusRefresher)
 		if !ok || !c.IsConfigured() {
 			continue
 		}
 
-		// Collect non-terminal external IDs for this source.
+		// Collect non-terminal external IDs within the backfill window.
 		var items []db.ActivityItem
 		if err := w.db.
-			Where("source = ?", c.Name()).
+			Joins("JOIN days ON days.id = activity_items.day_id").
+			Where("activity_items.source = ? AND days.date >= ?", c.Name(), cutoff).
 			Find(&items).Error; err != nil {
 			log.Printf("worker: refresh query %s: %v", c.Name(), err)
 			continue
