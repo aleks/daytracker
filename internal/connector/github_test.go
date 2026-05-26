@@ -3,7 +3,8 @@ package connector
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -11,54 +12,70 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ghFakeRunner returns a runner that replies with pre-canned JSON for each
-// successive call. Calls beyond the slice length return an error.
-func ghFakeRunner(responses ...[]byte) func(context.Context, ...string) ([]byte, error) {
+// ghFakeServer creates a TLS test server that serves pre-canned GraphQL data values in
+// sequence. Each POST consumes the next entry; pass nil to simulate an HTTP 500.
+func ghFakeServer(t *testing.T, dataValues ...any) *GitHubConnector {
+	t.Helper()
 	i := 0
-	return func(_ context.Context, _ ...string) ([]byte, error) {
-		if i >= len(responses) {
-			return nil, errors.New("unexpected gh call")
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if i >= len(dataValues) {
+			http.Error(w, "unexpected graphql call", http.StatusInternalServerError)
+			return
 		}
-		resp := responses[i]
+		v := dataValues[i]
 		i++
-		if resp == nil {
-			return nil, errors.New("gh error")
+		if v == nil {
+			http.Error(w, "simulated server error", http.StatusInternalServerError)
+			return
 		}
-		return resp, nil
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"data": v})
+	}))
+	t.Cleanup(srv.Close)
+	return &GitHubConnector{token: "fake-token", client: clientFor(srv)}
+}
+
+// newTestGitHub creates a GitHubConnector with a pre-seeded username,
+// bypassing the viewer query.
+func newTestGitHub(t *testing.T, username string, dataValues ...any) *GitHubConnector {
+	t.Helper()
+	g := ghFakeServer(t, dataValues...)
+	g.usernameOnce.Do(func() { g.username = username })
+	return g
+}
+
+// searchData wraps PR nodes in the GraphQL search envelope expected by searchPRs.
+func searchData(nodes []ghPRNode) any {
+	return map[string]any{"search": map[string]any{"nodes": nodes}}
+}
+
+// makePRNode constructs a ghPRNode for use in tests.
+func makePRNode(number int, title, url, state string, isDraft bool, authorLogin, repo string) ghPRNode {
+	n := ghPRNode{Number: number, Title: title, URL: url, State: state, IsDraft: isDraft}
+	n.Author.Login = authorLogin
+	n.Repository.NameWithOwner = repo
+	return n
+}
+
+// prEntry constructs a single alias entry for a batched RefreshStatuses response.
+func prEntry(state string, isDraft bool, reviewDecision string) map[string]any {
+	return map[string]any{
+		"pullRequest": map[string]any{
+			"state":          state,
+			"isDraft":        isDraft,
+			"reviewDecision": reviewDecision,
+		},
 	}
-}
-
-func mustJSON(v any) []byte {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-func makeSearchPRs(prs []ghSearchPR) []byte {
-	return mustJSON(prs)
-}
-
-// newTestGitHub creates a GitHubConnector with a pre-seeded username and the
-// given fake runner, bypassing the real gh CLI entirely.
-func newTestGitHub(username string, runner func(context.Context, ...string) ([]byte, error)) *GitHubConnector {
-	return &GitHubConnector{username: username, ghRunner: runner}
 }
 
 // ── Fetch: authored PRs ───────────────────────────────────────────────────────
 
 func TestGitHub_Fetch_AuthoredPR(t *testing.T) {
-	authored := []ghSearchPR{
-		{Number: 1, Title: "My PR", URL: "https://github.com/org/repo/pull/1",
-			State: "open", IsDraft: false,
-			Author:     struct{ Login string `json:"login"` }{Login: "alice"},
-			Repository: struct{ NameWithOwner string `json:"nameWithOwner"` }{NameWithOwner: "org/repo"}},
-	}
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs(authored),
-		makeSearchPRs([]ghSearchPR{}),
-	))
+	authored := []ghPRNode{makePRNode(1, "My PR", "https://github.com/org/repo/pull/1", "open", false, "alice", "org/repo")}
+	g := newTestGitHub(t, "alice",
+		searchData(authored),
+		searchData([]ghPRNode{}),
+	)
 
 	items, err := g.Fetch(context.Background(), time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
@@ -70,16 +87,11 @@ func TestGitHub_Fetch_AuthoredPR(t *testing.T) {
 }
 
 func TestGitHub_Fetch_ReviewedPR(t *testing.T) {
-	reviewed := []ghSearchPR{
-		{Number: 42, Title: "Someone's PR", URL: "https://github.com/org/repo/pull/42",
-			State:      "open",
-			Author:     struct{ Login string `json:"login"` }{Login: "bob"},
-			Repository: struct{ NameWithOwner string `json:"nameWithOwner"` }{NameWithOwner: "org/repo"}},
-	}
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs([]ghSearchPR{}), // authored — empty
-		makeSearchPRs(reviewed),       // reviewed
-	))
+	reviewed := []ghPRNode{makePRNode(42, "Someone's PR", "https://github.com/org/repo/pull/42", "open", false, "bob", "org/repo")}
+	g := newTestGitHub(t, "alice",
+		searchData([]ghPRNode{}),
+		searchData(reviewed),
+	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
 	require.NoError(t, err)
@@ -89,16 +101,11 @@ func TestGitHub_Fetch_ReviewedPR(t *testing.T) {
 }
 
 func TestGitHub_Fetch_OwnPRExcludedFromReviewed(t *testing.T) {
-	// alice's own PR appears in reviewed list — must be excluded.
-	reviewed := []ghSearchPR{
-		{Number: 7, Title: "Alice's own PR",
-			Author:     struct{ Login string `json:"login"` }{Login: "alice"},
-			Repository: struct{ NameWithOwner string `json:"nameWithOwner"` }{NameWithOwner: "org/repo"}},
-	}
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs([]ghSearchPR{}),
-		makeSearchPRs(reviewed),
-	))
+	reviewed := []ghPRNode{makePRNode(7, "Alice's own PR", "", "", false, "alice", "org/repo")}
+	g := newTestGitHub(t, "alice",
+		searchData([]ghPRNode{}),
+		searchData(reviewed),
+	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
 	require.NoError(t, err)
@@ -106,50 +113,40 @@ func TestGitHub_Fetch_OwnPRExcludedFromReviewed(t *testing.T) {
 }
 
 func TestGitHub_Fetch_AlreadyAuthoredNotDuplicated(t *testing.T) {
-	// PR appears in both authored and reviewed — should only appear once as authored.
-	pr := ghSearchPR{
-		Number: 5, Title: "Dual PR",
-		Author:     struct{ Login string `json:"login"` }{Login: "alice"},
-		Repository: struct{ NameWithOwner string `json:"nameWithOwner"` }{NameWithOwner: "org/repo"},
-	}
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs([]ghSearchPR{pr}),
-		makeSearchPRs([]ghSearchPR{pr}),
-	))
+	pr := makePRNode(5, "Dual PR", "", "open", false, "alice", "org/repo")
+	g := newTestGitHub(t, "alice",
+		searchData([]ghPRNode{pr}),
+		searchData([]ghPRNode{pr}),
+	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
 	require.NoError(t, err)
-	// alice's own PR is excluded from reviewed; no duplicate.
 	require.Len(t, items, 1)
 	assert.Equal(t, "authored_open", items[0].Kind)
 }
 
 func TestGitHub_Fetch_AuthoredQueryError(t *testing.T) {
-	g := newTestGitHub("alice", ghFakeRunner(nil)) // first call errors
+	g := newTestGitHub(t, "alice", nil) // first HTTP call returns 500
 	_, err := g.Fetch(context.Background(), time.Now())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "authored")
 }
 
 func TestGitHub_Fetch_ReviewedQueryError(t *testing.T) {
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs([]ghSearchPR{}), // authored ok
-		nil,                           // reviewed errors
-	))
+	g := newTestGitHub(t, "alice",
+		searchData([]ghPRNode{}), // authored ok
+		nil,                     // reviewed errors
+	)
 	_, err := g.Fetch(context.Background(), time.Now())
 	require.Error(t, err)
 }
 
 func TestGitHub_Fetch_DraftPR(t *testing.T) {
-	authored := []ghSearchPR{
-		{Number: 3, Title: "Draft PR", State: "open", IsDraft: true,
-			Author:     struct{ Login string `json:"login"` }{Login: "alice"},
-			Repository: struct{ NameWithOwner string `json:"nameWithOwner"` }{NameWithOwner: "org/repo"}},
-	}
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs(authored),
-		makeSearchPRs([]ghSearchPR{}),
-	))
+	authored := []ghPRNode{makePRNode(3, "Draft PR", "", "open", true, "alice", "org/repo")}
+	g := newTestGitHub(t, "alice",
+		searchData(authored),
+		searchData([]ghPRNode{}),
+	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
 	require.NoError(t, err)
@@ -158,15 +155,11 @@ func TestGitHub_Fetch_DraftPR(t *testing.T) {
 }
 
 func TestGitHub_Fetch_MergedPR(t *testing.T) {
-	authored := []ghSearchPR{
-		{Number: 9, Title: "Merged PR", State: "merged",
-			Author:     struct{ Login string `json:"login"` }{Login: "alice"},
-			Repository: struct{ NameWithOwner string `json:"nameWithOwner"` }{NameWithOwner: "org/repo"}},
-	}
-	g := newTestGitHub("alice", ghFakeRunner(
-		makeSearchPRs(authored),
-		makeSearchPRs([]ghSearchPR{}),
-	))
+	authored := []ghPRNode{makePRNode(9, "Merged PR", "", "merged", false, "alice", "org/repo")}
+	g := newTestGitHub(t, "alice",
+		searchData(authored),
+		searchData([]ghPRNode{}),
+	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
 	require.NoError(t, err)
@@ -177,30 +170,24 @@ func TestGitHub_Fetch_MergedPR(t *testing.T) {
 // ── resolveUsername ───────────────────────────────────────────────────────────
 
 func TestGitHub_ResolveUsername(t *testing.T) {
-	g := &GitHubConnector{
-		ghRunner: ghFakeRunner([]byte("alice\n")),
-	}
-	require.NoError(t, g.resolveUsername(context.Background()))
-	assert.Equal(t, "alice", g.username)
+	g := ghFakeServer(t, map[string]any{"viewer": map[string]any{"login": "alice"}})
+	username, err := g.resolveUsername(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "alice", username)
 }
 
 func TestGitHub_ResolveUsername_Cached(t *testing.T) {
-	calls := 0
-	g := &GitHubConnector{
-		username: "cached",
-		ghRunner: func(_ context.Context, _ ...string) ([]byte, error) {
-			calls++
-			return []byte("other"), nil
-		},
-	}
-	require.NoError(t, g.resolveUsername(context.Background()))
-	assert.Equal(t, "cached", g.username)
-	assert.Equal(t, 0, calls, "runner must not be called when username is already set")
+	// Pre-seed via usernameOnce; no HTTP calls should be made.
+	g := ghFakeServer(t) // no responses registered
+	g.usernameOnce.Do(func() { g.username = "cached" })
+	username, err := g.resolveUsername(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "cached", username)
 }
 
 func TestGitHub_ResolveUsername_Error(t *testing.T) {
-	g := &GitHubConnector{ghRunner: ghFakeRunner(nil)}
-	err := g.resolveUsername(context.Background())
+	g := ghFakeServer(t, nil) // HTTP 500
+	_, err := g.resolveUsername(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve username")
 }
@@ -208,8 +195,9 @@ func TestGitHub_ResolveUsername_Error(t *testing.T) {
 // ── RefreshStatuses ───────────────────────────────────────────────────────────
 
 func TestGitHub_RefreshStatuses_UpdatesKind(t *testing.T) {
-	detail := ghPRDetail{State: "OPEN", ReviewDecision: "APPROVED"}
-	g := newTestGitHub("alice", ghFakeRunner(mustJSON(detail)))
+	g := newTestGitHub(t, "alice", map[string]any{
+		"pr_0": prEntry("OPEN", false, "APPROVED"),
+	})
 
 	updates, err := g.RefreshStatuses(context.Background(), []PRStatusItem{
 		{ExternalID: "org/repo#1", CurrentKind: "authored_open"},
@@ -221,8 +209,9 @@ func TestGitHub_RefreshStatuses_UpdatesKind(t *testing.T) {
 }
 
 func TestGitHub_RefreshStatuses_PreservesRole(t *testing.T) {
-	detail := ghPRDetail{State: "MERGED"}
-	g := newTestGitHub("alice", ghFakeRunner(mustJSON(detail)))
+	g := newTestGitHub(t, "alice", map[string]any{
+		"pr_0": prEntry("MERGED", false, ""),
+	})
 
 	updates, err := g.RefreshStatuses(context.Background(), []PRStatusItem{
 		{ExternalID: "org/repo#2", CurrentKind: "reviewed_open"},
@@ -233,7 +222,7 @@ func TestGitHub_RefreshStatuses_PreservesRole(t *testing.T) {
 }
 
 func TestGitHub_RefreshStatuses_SkipsInvalidID(t *testing.T) {
-	g := newTestGitHub("alice", ghFakeRunner()) // no calls expected
+	g := newTestGitHub(t, "alice") // no HTTP calls expected
 	updates, err := g.RefreshStatuses(context.Background(), []PRStatusItem{
 		{ExternalID: "no-hash-here", CurrentKind: "authored_open"},
 	})
@@ -241,19 +230,25 @@ func TestGitHub_RefreshStatuses_SkipsInvalidID(t *testing.T) {
 	assert.Empty(t, updates)
 }
 
-func TestGitHub_RefreshStatuses_SkipsOnGHError(t *testing.T) {
-	g := newTestGitHub("alice", ghFakeRunner(nil)) // gh errors for the PR
+func TestGitHub_RefreshStatuses_NullPRSkipped(t *testing.T) {
+	// A null pullRequest in the response means the PR was deleted or is inaccessible;
+	// it must be silently skipped rather than causing an error.
+	g := newTestGitHub(t, "alice", map[string]any{
+		"pr_0": map[string]any{"pullRequest": nil},
+	})
 	updates, err := g.RefreshStatuses(context.Background(), []PRStatusItem{
 		{ExternalID: "org/repo#1", CurrentKind: "authored_open"},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, updates, "failed PR lookup must be silently skipped")
+	assert.Empty(t, updates)
 }
 
-func TestGitHub_RefreshStatuses_MultipleItems(t *testing.T) {
-	open := ghPRDetail{State: "OPEN"}
-	merged := ghPRDetail{State: "MERGED"}
-	g := newTestGitHub("alice", ghFakeRunner(mustJSON(open), mustJSON(merged)))
+func TestGitHub_RefreshStatuses_BatchedInOneRequest(t *testing.T) {
+	// Two items must be sent in a single GraphQL request (one HTTP call, two aliases).
+	g := newTestGitHub(t, "alice", map[string]any{
+		"pr_0": prEntry("OPEN", false, ""),
+		"pr_1": prEntry("MERGED", false, ""),
+	})
 
 	updates, err := g.RefreshStatuses(context.Background(), []PRStatusItem{
 		{ExternalID: "org/repo#1", CurrentKind: "authored_open"},

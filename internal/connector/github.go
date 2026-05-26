@@ -5,49 +5,66 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
+	"io"
+	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aleksmaksimow/daytracker/internal/db"
 )
 
-// GitHubConnector fetches PRs authored or reviewed by the current user.
+const githubGraphQLEndpoint = "https://api.github.com/graphql"
+
+// GitHubConnector fetches PRs authored or reviewed by the current user via the GitHub GraphQL API.
 type GitHubConnector struct {
-	username string // resolved lazily on first Fetch
-	ghRunner func(ctx context.Context, args ...string) ([]byte, error)
+	token  string
+	client *http.Client
+
+	usernameOnce sync.Once
+	username     string
+	usernameErr  error
 }
 
 func NewGitHub() *GitHubConnector {
-	return &GitHubConnector{ghRunner: runGH}
-}
-
-func (g *GitHubConnector) resolveUsername(ctx context.Context) error {
-	if g.username != "" {
-		return nil
+	return &GitHubConnector{
+		token:  os.Getenv("DAYTRACKER_GITHUB_TOKEN"),
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
-	out, err := g.ghRunner(ctx, "api", "user", "--jq", ".login")
-	if err != nil {
-		return fmt.Errorf("github: resolve username: %w", err)
-	}
-	g.username = strings.TrimSpace(string(out))
-	return nil
 }
 
 func (g *GitHubConnector) Name() string { return "github" }
 
-func (g *GitHubConnector) IsConfigured() bool {
-	// gh CLI handles auth itself; we just check it's present and logged in.
-	err := exec.Command("gh", "auth", "status").Run()
-	return err == nil
+func (g *GitHubConnector) IsConfigured() bool { return g.token != "" }
+
+func (g *GitHubConnector) resolveUsername(ctx context.Context) (string, error) {
+	g.usernameOnce.Do(func() {
+		data, err := g.graphql(ctx, `query { viewer { login } }`, nil)
+		if err != nil {
+			g.usernameErr = fmt.Errorf("github: resolve username: %w", err)
+			return
+		}
+		var resp struct {
+			Viewer struct {
+				Login string `json:"login"`
+			} `json:"viewer"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			g.usernameErr = fmt.Errorf("github: parse viewer: %w", err)
+			return
+		}
+		g.username = resp.Viewer.Login
+	})
+	return g.username, g.usernameErr
 }
 
-// ghSearchPR is the shape returned by gh search prs --json.
-type ghSearchPR struct {
+// ghPRNode is the shape of a PullRequest node returned from a GraphQL search.
+type ghPRNode struct {
 	Number  int    `json:"number"`
 	Title   string `json:"title"`
 	URL     string `json:"url"`
-	State   string `json:"state"` // "open" | "closed" | "merged"
+	State   string `json:"state"`
 	IsDraft bool   `json:"isDraft"`
 	Author  struct {
 		Login string `json:"login"`
@@ -57,26 +74,43 @@ type ghSearchPR struct {
 	} `json:"repository"`
 }
 
+const prSearchQuery = `
+query($q: String!) {
+  search(query: $q, type: ISSUE, first: 100) {
+    nodes {
+      ... on PullRequest {
+        number
+        title
+        url
+        state
+        isDraft
+        author { login }
+        repository { nameWithOwner }
+      }
+    }
+  }
+}`
+
 func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.ActivityItem, error) {
-	if err := g.resolveUsername(ctx); err != nil {
+	username, err := g.resolveUsername(ctx)
+	if err != nil {
 		return nil, err
 	}
 
 	dateStr := date.Format("2006-01-02")
 
-	authored, err := g.searchPRs(ctx, "--author", "@me", "--created", dateStr)
+	authored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s created:%s", username, dateStr))
 	if err != nil {
 		return nil, fmt.Errorf("github fetch authored: %w", err)
 	}
 
-	reviewed, err := g.searchPRs(ctx, "--reviewed-by", "@me", "--updated", dateStr)
+	reviewed, err := g.searchPRs(ctx, fmt.Sprintf("is:pr reviewed-by:%s updated:%s", username, dateStr))
 	if err != nil {
 		return nil, fmt.Errorf("github fetch reviewed: %w", err)
 	}
 
 	var items []db.ActivityItem
 
-	// Build authored set — used both for items and for dedup below.
 	authoredIDs := make(map[string]bool, len(authored))
 	for _, pr := range authored {
 		id := fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)
@@ -84,17 +118,15 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 		items = append(items, db.ActivityItem{
 			Source:     "github",
 			ExternalID: id,
-			Kind:       prKindFromSearch(pr, "authored"),
+			Kind:       "authored_" + prState(pr.State, pr.IsDraft),
 			Title:      pr.Title,
 			URL:        pr.URL,
 			Metadata:   pr.Repository.NameWithOwner,
 		})
 	}
 
-	// Reviewed list: exclude any PR whose author is the current user,
-	// regardless of whether it appeared in the authored query for this date.
 	for _, pr := range reviewed {
-		if strings.EqualFold(pr.Author.Login, g.username) {
+		if strings.EqualFold(pr.Author.Login, username) {
 			continue
 		}
 		id := fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)
@@ -104,7 +136,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 		items = append(items, db.ActivityItem{
 			Source:     "github",
 			ExternalID: id,
-			Kind:       prKindFromSearch(pr, "reviewed"),
+			Kind:       "reviewed_" + prState(pr.State, pr.IsDraft),
 			Title:      pr.Title,
 			URL:        pr.URL,
 			Metadata:   pr.Repository.NameWithOwner,
@@ -114,31 +146,32 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	return items, nil
 }
 
-func (g *GitHubConnector) searchPRs(ctx context.Context, extraArgs ...string) ([]ghSearchPR, error) {
-	args := append([]string{"search", "prs",
-		"--json", "number,title,url,state,isDraft,author,repository",
-		"--limit", "100",
-	}, extraArgs...)
-
-	out, err := g.ghRunner(ctx, args...)
+func (g *GitHubConnector) searchPRs(ctx context.Context, q string) ([]ghPRNode, error) {
+	data, err := g.graphql(ctx, prSearchQuery, map[string]any{"q": q})
 	if err != nil {
 		return nil, err
 	}
 
-	var prs []ghSearchPR
-	if err := json.Unmarshal(out, &prs); err != nil {
-		return nil, fmt.Errorf("parse: %w", err)
+	var resp struct {
+		Search struct {
+			Nodes []ghPRNode `json:"nodes"`
+		} `json:"search"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("github: parse search: %w", err)
+	}
+
+	// Nodes that don't match the PullRequest inline fragment come back with zero
+	// values; filter them out.
+	var prs []ghPRNode
+	for _, n := range resp.Search.Nodes {
+		if n.Number != 0 {
+			prs = append(prs, n)
+		}
 	}
 	return prs, nil
 }
 
-// prKindFromSearch derives the initial kind from a search result.
-// Kinds are prefixed with the role: "authored_*" or "reviewed_*".
-func prKindFromSearch(pr ghSearchPR, role string) string {
-	return role + "_" + prState(pr.State, pr.IsDraft)
-}
-
-// prState maps raw state + isDraft to the state suffix shared by both roles.
 func prState(state string, isDraft bool) string {
 	switch strings.ToUpper(state) {
 	case "MERGED":
@@ -154,52 +187,81 @@ func prState(state string, isDraft bool) string {
 
 // ── Status refresh ────────────────────────────────────────────────────────────
 
-// ghPRDetail is the shape returned by gh pr view --json.
-type ghPRDetail struct {
-	Number         int    `json:"number"`
-	State          string `json:"state"` // "OPEN" | "CLOSED" | "MERGED"
-	IsDraft        bool   `json:"isDraft"`
-	ReviewDecision string `json:"reviewDecision"` // "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | ""
-	MergedAt       string `json:"mergedAt"`
-}
-
-// RefreshStatuses fetches live state for each item and returns updated kinds.
-// The role prefix ("authored" / "reviewed") is preserved from CurrentKind.
+// RefreshStatuses fetches live PR state for all items in a single batched GraphQL
+// request using indexed aliases, rather than one round-trip per PR.
 func (g *GitHubConnector) RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error) {
-	updates := make([]PRStatusUpdate, 0, len(items))
+	if len(items) == 0 {
+		return nil, nil
+	}
 
+	// Build a dynamic query: one alias per PR.
+	var sb strings.Builder
+	sb.WriteString("query {")
+	var valid []PRStatusItem
 	for _, item := range items {
-		owner, number, ok := parseExternalID(item.ExternalID)
+		repo, numStr, ok := parseExternalID(item.ExternalID)
 		if !ok {
 			continue
 		}
-
-		out, err := g.ghRunner(ctx, "pr", "view", number,
-			"--repo", owner,
-			"--json", "number,state,isDraft,reviewDecision,mergedAt",
+		owner, repoName, ok := splitRepo(repo)
+		if !ok {
+			continue
+		}
+		var num int
+		if _, err := fmt.Sscan(numStr, &num); err != nil {
+			continue
+		}
+		fmt.Fprintf(&sb,
+			"\n  pr_%d: repository(owner: %q, name: %q) { pullRequest(number: %d) { state isDraft reviewDecision } }",
+			len(valid), owner, repoName, num,
 		)
-		if err != nil {
-			// PR deleted or repo access lost — skip silently.
+		valid = append(valid, item)
+	}
+	sb.WriteString("\n}")
+
+	if len(valid) == 0 {
+		return nil, nil
+	}
+
+	data, err := g.graphql(ctx, sb.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("github: refresh statuses: %w", err)
+	}
+
+	var rawData map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawData); err != nil {
+		return nil, fmt.Errorf("github: parse refresh response: %w", err)
+	}
+
+	type prResult struct {
+		PullRequest *struct {
+			State          string `json:"state"`
+			IsDraft        bool   `json:"isDraft"`
+			ReviewDecision string `json:"reviewDecision"`
+		} `json:"pullRequest"`
+	}
+
+	updates := make([]PRStatusUpdate, 0, len(valid))
+	for i, item := range valid {
+		raw, ok := rawData[fmt.Sprintf("pr_%d", i)]
+		if !ok {
 			continue
 		}
-
-		var detail ghPRDetail
-		if err := json.Unmarshal(out, &detail); err != nil {
+		var repo prResult
+		if err := json.Unmarshal(raw, &repo); err != nil || repo.PullRequest == nil {
 			continue
 		}
-
+		pr := repo.PullRequest
 		role := roleFromKind(item.CurrentKind)
 		updates = append(updates, PRStatusUpdate{
 			ExternalID: item.ExternalID,
-			Kind:       role + "_" + prStateFromDetail(detail),
+			Kind:       role + "_" + prStateFromDetail(pr.State, pr.IsDraft, pr.ReviewDecision),
 		})
 	}
 
 	return updates, nil
 }
 
-// roleFromKind extracts "authored" or "reviewed" from a kind like "authored_open".
-// Falls back to "authored" if the kind has no underscore.
 func roleFromKind(kind string) string {
 	if idx := strings.Index(kind, "_"); idx >= 0 {
 		return kind[:idx]
@@ -207,18 +269,17 @@ func roleFromKind(kind string) string {
 	return "authored"
 }
 
-// prStateFromDetail maps a live pr view result to a state suffix.
-func prStateFromDetail(d ghPRDetail) string {
-	switch strings.ToUpper(d.State) {
+func prStateFromDetail(state string, isDraft bool, reviewDecision string) string {
+	switch strings.ToUpper(state) {
 	case "MERGED":
 		return "merged"
 	case "CLOSED":
 		return "closed"
 	}
-	if d.IsDraft {
+	if isDraft {
 		return "draft"
 	}
-	switch d.ReviewDecision {
+	switch reviewDecision {
 	case "APPROVED":
 		return "approved"
 	case "CHANGES_REQUESTED":
@@ -239,13 +300,63 @@ func parseExternalID(id string) (repo, number string, ok bool) {
 	return id[:idx], id[idx+1:], true
 }
 
-func runGH(ctx context.Context, args ...string) ([]byte, error) {
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "gh", args...)
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("gh %s: %w — %s", strings.Join(args, " "), err, stderr.String())
+// splitRepo splits "owner/repo" into ("owner", "repo", true).
+func splitRepo(nameWithOwner string) (owner, name string, ok bool) {
+	parts := strings.SplitN(nameWithOwner, "/", 2)
+	if len(parts) != 2 {
+		return "", "", false
 	}
-	return out, nil
+	return parts[0], parts[1], true
+}
+
+// graphql executes a GraphQL query and returns the data field of the response.
+func (g *GitHubConnector) graphql(ctx context.Context, query string, variables map[string]any) (json.RawMessage, error) {
+	payload, err := json.Marshal(map[string]any{
+		"query":     query,
+		"variables": variables,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, githubGraphQLEndpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+g.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github graphql: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var envelope struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, fmt.Errorf("github graphql: parse response: %w", err)
+	}
+	if len(envelope.Errors) > 0 {
+		msgs := make([]string, len(envelope.Errors))
+		for i, e := range envelope.Errors {
+			msgs[i] = e.Message
+		}
+		return nil, fmt.Errorf("github graphql errors: %s", strings.Join(msgs, "; "))
+	}
+
+	return envelope.Data, nil
 }
