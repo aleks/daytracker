@@ -1,0 +1,6 @@
+daytracker
+daytracker.db
+*.db
+web/dist/
+web/node_modules/
+.env
