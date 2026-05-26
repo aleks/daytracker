@@ -6,11 +6,13 @@ interface Props {
   date: string
   tasks: Task[]
   onChanged: (tasks: Task[]) => void
+  onCopyToToday?: (title: string) => Promise<void>
 }
 
-export function TaskList({ date, tasks, onChanged }: Props) {
+export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [adding, setAdding] = useState(false)
+  const [copying, setCopying] = useState<number | null>(null)
 
   const add = async () => {
     const title = newTitle.trim()
@@ -35,6 +37,18 @@ export function TaskList({ date, tasks, onChanged }: Props) {
     } catch (err) {
       console.error('toggle task:', err)
       onChanged(tasks)
+    }
+  }
+
+  const copyToToday = async (task: Task) => {
+    if (!onCopyToToday) return
+    setCopying(task.id)
+    try {
+      await onCopyToToday(task.title)
+    } catch (err) {
+      console.error('copy task:', err)
+    } finally {
+      setCopying(null)
     }
   }
 
@@ -81,6 +95,16 @@ export function TaskList({ date, tasks, onChanged }: Props) {
               onChange={() => toggle(task)}
             />
             <span class="task-title">{task.title}</span>
+            {onCopyToToday && !task.done && (
+              <button
+                class="task-copy"
+                onClick={() => copyToToday(task)}
+                disabled={copying === task.id}
+                title="Copy to today"
+              >
+                {copying === task.id ? '…' : '↑ today'}
+              </button>
+            )}
             <button class="task-delete" onClick={() => remove(task)} title="Delete">×</button>
           </li>
         ))}

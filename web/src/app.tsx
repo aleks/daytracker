@@ -9,6 +9,7 @@ function todayStr(): string {
 
 export function App() {
   const [dates, setDates] = useState<string[]>([todayStr()])
+  const [todayRefresh, setTodayRefresh] = useState(0)
 
   useEffect(() => {
     api.listDays()
@@ -22,6 +23,8 @@ export function App() {
       .catch(console.error)
   }, [])
 
+  const today = todayStr()
+
   return (
     <div class="app">
       <header class="app-header">
@@ -31,7 +34,12 @@ export function App() {
 
       <main class="app-main">
         {dates.map(date => (
-          <DayPage key={date} date={date} />
+          <DayPage
+            key={date === today ? `${date}-${todayRefresh}` : date}
+            date={date}
+            isToday={date === today}
+            onTodayChanged={() => setTodayRefresh(r => r + 1)}
+          />
         ))}
       </main>
     </div>

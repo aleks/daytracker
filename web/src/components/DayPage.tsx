@@ -6,6 +6,8 @@ import { TaskList } from './TaskList'
 
 interface Props {
   date: string
+  isToday?: boolean
+  onTodayChanged?: () => void
 }
 
 function formatDate(dateStr: string): string {
@@ -13,7 +15,7 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-export function DayPage({ date }: Props) {
+export function DayPage({ date, isToday, onTodayChanged }: Props) {
   const [detail, setDetail] = useState<DayDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,7 +40,16 @@ export function DayPage({ date }: Props) {
         <div class="day-body">
           <div class="day-section">
             <h3 class="section-heading">Tasks</h3>
-            <TaskList date={date} tasks={detail.tasks} onChanged={handleTasksChanged} />
+            <TaskList
+              date={date}
+              tasks={detail.tasks}
+              onChanged={handleTasksChanged}
+              onCopyToToday={!isToday ? async (title) => {
+                const today = new Date().toISOString().slice(0, 10)
+                await api.createTask(today, title)
+                onTodayChanged?.()
+              } : undefined}
+            />
           </div>
 
           <div class="day-section">

@@ -171,6 +171,29 @@ body {
   flex: 1;
 }
 
+.task-copy {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-accent);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  padding: 2px var(--space-sm);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.task-copy:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.task-item:hover .task-copy {
+  opacity: 1;
+}
+
 .task-delete {
   background: none;
   border: none;
