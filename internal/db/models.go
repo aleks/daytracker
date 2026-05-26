@@ -18,9 +18,9 @@ type Task struct {
 
 type ActivityItem struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
-	DayID      uint      `gorm:"not null;index" json:"day_id"`
-	Source     string    `gorm:"not null;uniqueIndex:idx_source_ext" json:"source"`
-	ExternalID string    `gorm:"not null;uniqueIndex:idx_source_ext" json:"external_id"`
+	DayID      uint      `gorm:"not null;uniqueIndex:idx_source_ext_day" json:"day_id"`
+	Source     string    `gorm:"not null;uniqueIndex:idx_source_ext_day" json:"source"`
+	ExternalID string    `gorm:"not null;uniqueIndex:idx_source_ext_day" json:"external_id"`
 	Kind       string    `gorm:"not null" json:"kind"`
 	Title      string    `gorm:"not null" json:"title"`
 	URL        string    `json:"url"`
