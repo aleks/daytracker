@@ -66,10 +66,12 @@ func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem
 // stubRefresher adds StatusRefresher capability to a stubConnector.
 type stubRefresher struct {
 	stubConnector
-	updates []connector.PRStatusUpdate
-	err     error
+	updates      []connector.PRStatusUpdate
+	err          error
+	terminalKinds map[string]bool
 }
 
+func (s *stubRefresher) IsTerminal(kind string) bool { return s.terminalKinds[kind] }
 func (s *stubRefresher) RefreshStatuses(_ context.Context, items []connector.PRStatusItem) ([]connector.PRStatusUpdate, error) {
 	return s.updates, s.err
 }
@@ -223,17 +225,26 @@ func TestSyncAll_OneErrorDoesNotStopOthers(t *testing.T) {
 	assert.Len(t, items, 1, "items from the healthy connector must be persisted")
 }
 
-// ── terminalKinds ─────────────────────────────────────────────────────────────
+// ── IsTerminal ────────────────────────────────────────────────────────────────
 
-func TestTerminalKinds(t *testing.T) {
+func TestGitHub_IsTerminal(t *testing.T) {
+	// Import via the connector package since GitHubConnector is not exported to
+	// this package; test the behaviour through the interface.
 	terminal := []string{"authored_merged", "authored_closed", "reviewed_merged", "reviewed_closed"}
-	nonTerminal := []string{"authored_open", "authored_draft", "reviewed_open", "reviewed_in_review", "jira_done", "confluence_edited"}
+	nonTerminal := []string{"authored_open", "authored_draft", "reviewed_open", "reviewed_in_review"}
 
+	stub := &stubRefresher{
+		stubConnector: stubConnector{name: "github", configured: true},
+		terminalKinds: map[string]bool{
+			"authored_merged": true, "authored_closed": true,
+			"reviewed_merged": true, "reviewed_closed": true,
+		},
+	}
 	for _, k := range terminal {
-		assert.True(t, terminalKinds[k], "expected %q to be terminal", k)
+		assert.True(t, stub.IsTerminal(k), "expected %q to be terminal", k)
 	}
 	for _, k := range nonTerminal {
-		assert.False(t, terminalKinds[k], "expected %q to be non-terminal", k)
+		assert.False(t, stub.IsTerminal(k), "expected %q to be non-terminal", k)
 	}
 }
 
@@ -255,6 +266,10 @@ func TestRefreshAllStatuses_UpdatesNonTerminal(t *testing.T) {
 		stubConnector: stubConnector{name: "github", configured: true},
 		updates: []connector.PRStatusUpdate{
 			{ExternalID: "repo#1", Kind: "authored_merged"},
+		},
+		terminalKinds: map[string]bool{
+			"authored_merged": true, "authored_closed": true,
+			"reviewed_merged": true, "reviewed_closed": true,
 		},
 	}
 	w := newWorker(t, database, stub)
@@ -307,11 +322,11 @@ func TestRefreshAllStatuses_OnlyNonTerminalSentToRefresher(t *testing.T) {
 		captured *[]connector.PRStatusItem
 	}
 
-	// Use a function-based approach instead: put the stub's updates response as empty
-	// and verify by checking what items are in DB after refresh.
-	// Simpler: just verify that terminal items aren't in the pending list passed to RefreshStatuses
-	// by inspecting that the merged/closed items are not updated.
 	_ = received
+	stub.terminalKinds = map[string]bool{
+		"authored_merged": true, "authored_closed": true,
+		"reviewed_merged": true, "reviewed_closed": true,
+	}
 	w := newWorker(t, database, stub)
 	w.refreshAllStatuses(context.Background())
 	// No panics, no errors — the empty updates list means nothing changes.

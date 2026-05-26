@@ -85,11 +85,14 @@ type Connector interface {
 
 ```go
 type StatusRefresher interface {
+    // IsTerminal reports whether the given kind string represents a state that
+    // can never change, so the worker can skip those items during refresh.
+    IsTerminal(kind string) bool
     RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error)
 }
 ```
 
-Implement this when a connector has stateful items whose state can change after the fetch date (e.g. a PR going from open → merged). The worker calls `RefreshStatuses` every `DAYTRACKER_STATUS_REFRESH_INTERVAL` for all items within the backfill window that are not in a terminal state.
+Implement this when a connector has stateful items whose state can change after the fetch date (e.g. a PR going from open → merged). The worker calls `RefreshStatuses` every `DAYTRACKER_STATUS_REFRESH_INTERVAL` for all items within the backfill window that are not terminal. `IsTerminal` is defined on the connector so each connector owns knowledge of its own terminal states — the worker has no hardcoded kind strings.
 
 The worker updates rows **by primary key** (`id`), not by `(source, external_id)`, so that only the specific day's row is mutated and other days' history is preserved.
 
