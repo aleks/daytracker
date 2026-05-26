@@ -178,15 +178,18 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 		return err
 	}
 
-	for i := range items {
-		items[i].DayID = day.ID
-		items[i].FetchedAt = now
+	// Copy so we don't mutate the slice returned by Fetch.
+	rows := make([]db.ActivityItem, len(items))
+	copy(rows, items)
+	for i := range rows {
+		rows[i].DayID = day.ID
+		rows[i].FetchedAt = now
 	}
 
 	return w.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"title", "url", "kind", "metadata", "fetched_at"}),
-	}).Create(&items).Error
+	}).Create(&rows).Error
 }
 
 // refreshAllStatuses iterates over every registered connector that implements
