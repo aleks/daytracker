@@ -13,9 +13,23 @@ import (
 )
 
 // GitHubConnector fetches PRs authored or reviewed by the current user.
-type GitHubConnector struct{}
+type GitHubConnector struct {
+	username string // resolved lazily on first Fetch
+}
 
 func NewGitHub() *GitHubConnector { return &GitHubConnector{} }
+
+func (g *GitHubConnector) resolveUsername(ctx context.Context) error {
+	if g.username != "" {
+		return nil
+	}
+	out, err := runGH(ctx, "api", "user", "--jq", ".login")
+	if err != nil {
+		return fmt.Errorf("github: resolve username: %w", err)
+	}
+	g.username = strings.TrimSpace(string(out))
+	return nil
+}
 
 func (g *GitHubConnector) Name() string { return "github" }
 
@@ -27,17 +41,24 @@ func (g *GitHubConnector) IsConfigured() bool {
 
 // ghSearchPR is the shape returned by gh search prs --json.
 type ghSearchPR struct {
-	Number     int    `json:"number"`
-	Title      string `json:"title"`
-	URL        string `json:"url"`
-	State      string `json:"state"` // "open" | "closed" | "merged"
-	IsDraft    bool   `json:"isDraft"`
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	State   string `json:"state"` // "open" | "closed" | "merged"
+	IsDraft bool   `json:"isDraft"`
+	Author  struct {
+		Login string `json:"login"`
+	} `json:"author"`
 	Repository struct {
 		NameWithOwner string `json:"nameWithOwner"`
 	} `json:"repository"`
 }
 
 func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.ActivityItem, error) {
+	if err := g.resolveUsername(ctx); err != nil {
+		return nil, err
+	}
+
 	dateStr := date.Format("2006-01-02")
 
 	authored, err := searchPRs(ctx, "--author", "@me", "--created", dateStr)
@@ -52,10 +73,14 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 
 	var items []db.ActivityItem
 
+	// Build authored set — used both for items and for dedup below.
+	authoredIDs := make(map[string]bool, len(authored))
 	for _, pr := range authored {
+		id := fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)
+		authoredIDs[id] = true
 		items = append(items, db.ActivityItem{
 			Source:     "github",
-			ExternalID: fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number),
+			ExternalID: id,
 			Kind:       prKindFromSearch(pr, "authored"),
 			Title:      pr.Title,
 			URL:        pr.URL,
@@ -63,12 +88,12 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 		})
 	}
 
-	// Deduplicate reviewed: skip PRs the user also authored (already included above).
-	authoredIDs := make(map[string]bool, len(authored))
-	for _, pr := range authored {
-		authoredIDs[fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)] = true
-	}
+	// Reviewed list: exclude any PR whose author is the current user,
+	// regardless of whether it appeared in the authored query for this date.
 	for _, pr := range reviewed {
+		if strings.EqualFold(pr.Author.Login, g.username) {
+			continue
+		}
 		id := fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)
 		if authoredIDs[id] {
 			continue
@@ -88,7 +113,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 
 func searchPRs(ctx context.Context, extraArgs ...string) ([]ghSearchPR, error) {
 	args := append([]string{"search", "prs",
-		"--json", "number,title,url,state,isDraft,repository",
+		"--json", "number,title,url,state,isDraft,author,repository",
 		"--limit", "100",
 	}, extraArgs...)
 
