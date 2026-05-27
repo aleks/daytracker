@@ -15,33 +15,42 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 - **Markdown backup** — optionally mirrors every day to a `YYYY/MM/DD.md` file tree (tasks + activity, with links) that you can commit to a notes repo or open in any editor
 - **Local-first** — all data is stored in a single SQLite file on your machine; no cloud account needed
 
-## Prerequisites
-
-- [Go 1.22+](https://go.dev/dl/)
-- [Node.js 18+](https://nodejs.org/) and npm (only needed to build the frontend)
-
 ## Install
 
-### Option 1: `go install` (no frontend build needed)
+### Option 1: Download a prebuilt binary
 
-> Only works once a release binary is published. For now, clone and build.
+Download the latest binary for your platform from the [releases page](https://github.com/aleksmaksimow/daytracker/releases).
 
-### Option 2: Clone and build
+| Platform | File |
+|---|---|
+| macOS (Apple Silicon) | `daytracker-darwin-arm64` |
+| macOS (Intel) | `daytracker-darwin-amd64` |
+| Linux (x86-64) | `daytracker-linux-amd64` |
+| Linux (ARM64) | `daytracker-linux-arm64` |
+
+```bash
+chmod +x daytracker-darwin-arm64
+mv daytracker-darwin-arm64 daytracker
+```
+
+On macOS you may need to allow the binary under **System Settings → Privacy & Security** on first run.
+
+### Option 2: Build from source
+
+Requires [Go 1.22+](https://go.dev/dl/) and [Node.js 18+](https://nodejs.org/).
 
 ```bash
 git clone https://github.com/aleksmaksimow/daytracker.git
 cd daytracker
-
-# Install frontend dependencies and build the embedded UI
 cd web && npm install && cd ..
-
-# Build the single binary (frontend is embedded)
 make build
 ```
 
-This produces a `./daytracker` binary with the frontend baked in — no separate web server needed.
+This produces a `./daytracker` binary with the frontend embedded — no separate web server needed.
 
-### Option 3: Run without building (development)
+### Option 3: Development mode
+
+Requires [Go 1.22+](https://go.dev/dl/) and [Node.js 18+](https://nodejs.org/).
 
 ```bash
 git clone https://github.com/aleksmaksimow/daytracker.git
