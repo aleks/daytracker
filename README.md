@@ -14,6 +14,7 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 - **Single binary** — the Preact frontend is embedded; no separate web server or database process required
 - **Markdown backup** — optionally mirrors every day to a `YYYY/MM/DD.md` file tree (tasks + activity, with links) that you can commit to a notes repo or open in any editor
 - **Local-first** — all data is stored in a single SQLite file on your machine; no cloud account needed
+- **Raycast integration** — add tasks to today's list from the Raycast launcher without opening the app
 
 ## Install
 
@@ -172,3 +173,19 @@ Set `DAYTRACKER_BACKUP_DIR` to any directory and daytracker will write a snapsho
 Each file contains your tasks (as a checklist) and your activity grouped by source, with titles linked to their original URLs. Files are overwritten on every sync and also refreshed every 2 minutes so task completions land quickly.
 
 The directory is plain text — you can commit it to a notes repo, open it in Obsidian or any Markdown editor, or feed individual day files directly to an AI assistant to answer questions like "what did I work on last Tuesday?" or "summarise my Jira activity this week".
+
+## Raycast integration
+
+The `raycast-scripts/` directory contains a [Raycast](https://raycast.com) script command that lets you add tasks to today's list directly from the Raycast launcher.
+
+**Setup:**
+
+1. Open Raycast → **Settings → Extensions → Script Commands**
+2. Click **Add Directories** and select the `raycast-scripts/` folder in this repo
+3. Search for **"Add Daytracker Todo"** in Raycast
+
+**Usage:**
+
+Invoke the command, type your task title, and hit Enter. A notification confirms the task was added. Daytracker must be running for the command to work.
+
+By default the script posts to `http://localhost:8080`. If you've changed `DAYTRACKER_PORT`, export it in your shell environment and the script will pick it up.
