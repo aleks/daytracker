@@ -43,6 +43,7 @@ func (s *stubConnector) KindLabel(kind string) string {
 	}
 	return kind
 }
+func (s *stubConnector) ShouldCarryForward(_ string) bool { return false }
 func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem, error) {
 	return nil, nil
 }

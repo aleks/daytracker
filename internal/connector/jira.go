@@ -42,6 +42,10 @@ func (j *JiraConnector) IsConfigured() bool {
 	return j.baseURL != "" && j.email != "" && j.token != ""
 }
 
+func (j *JiraConnector) ShouldCarryForward(kind string) bool {
+	return kind == "jira_todo" || kind == "jira_in_progress"
+}
+
 func (j *JiraConnector) KindLabel(kind string) string {
 	switch kind {
 	case "jira_todo":

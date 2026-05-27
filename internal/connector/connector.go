@@ -15,6 +15,9 @@ type Connector interface {
 	// KindLabel returns a human-readable label for the given kind string.
 	// Falls back to returning kind unchanged for unrecognised values.
 	KindLabel(kind string) string
+	// ShouldCarryForward reports whether an activity item with this kind should
+	// be copied to the next day when it hasn't reached a terminal state.
+	ShouldCarryForward(kind string) bool
 }
 
 // PRStatusItem carries the external ID and current kind of an item to refresh.

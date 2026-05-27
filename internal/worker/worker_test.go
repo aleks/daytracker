@@ -44,6 +44,7 @@ func newWorker(t *testing.T, database *gorm.DB, connectors ...connector.Connecto
 		interval:        time.Hour,
 		refreshInterval: time.Hour,
 		backfill:        3,
+		carryDone:       make(map[string]bool),
 	}
 }
 
@@ -56,9 +57,10 @@ type stubConnector struct {
 	calls      int
 }
 
-func (s *stubConnector) Name() string                    { return s.name }
-func (s *stubConnector) IsConfigured() bool              { return s.configured }
-func (s *stubConnector) KindLabel(kind string) string    { return kind }
+func (s *stubConnector) Name() string                     { return s.name }
+func (s *stubConnector) IsConfigured() bool               { return s.configured }
+func (s *stubConnector) KindLabel(kind string) string     { return kind }
+func (s *stubConnector) ShouldCarryForward(_ string) bool { return false }
 func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem, error) {
 	s.calls++
 	return s.items, s.err
@@ -335,4 +337,137 @@ func TestRefreshAllStatuses_OnlyNonTerminalSentToRefresher(t *testing.T) {
 	var merged db.ActivityItem
 	require.NoError(t, database.Where("external_id = ?", "repo#2").First(&merged).Error)
 	assert.Equal(t, "authored_merged", merged.Kind)
+}
+
+// ── carryForward ──────────────────────────────────────────────────────────────
+
+// carryStub is a connector whose ShouldCarryForward is configurable per kind.
+type carryStub struct {
+	stubConnector
+	carryKinds map[string]bool
+}
+
+func (s *carryStub) ShouldCarryForward(kind string) bool { return s.carryKinds[kind] }
+
+func TestCarryForward_CarriesActivitiesAndTasks(t *testing.T) {
+	database := newTestDB(t)
+	today := utcToday()
+	yesterday := today.AddDate(0, 0, -1)
+
+	// Seed yesterday with one carry-eligible activity, one not, and one undone task.
+	yDay := db.Day{Date: yesterday}
+	require.NoError(t, database.Create(&yDay).Error)
+
+	openItem := db.ActivityItem{DayID: yDay.ID, Source: "github", ExternalID: "repo#1", Kind: "authored_open", Title: "Open PR"}
+	mergedItem := db.ActivityItem{DayID: yDay.ID, Source: "github", ExternalID: "repo#2", Kind: "authored_merged", Title: "Merged PR"}
+	require.NoError(t, database.Create(&openItem).Error)
+	require.NoError(t, database.Create(&mergedItem).Error)
+
+	undoneTask := db.Task{DayID: yDay.ID, Title: "write tests", Done: false}
+	doneTask := db.Task{DayID: yDay.ID, Title: "done task", Done: true}
+	require.NoError(t, database.Create(&undoneTask).Error)
+	require.NoError(t, database.Create(&doneTask).Error)
+
+	stub := &carryStub{
+		stubConnector: stubConnector{name: "github", configured: true},
+		carryKinds:    map[string]bool{"authored_open": true},
+	}
+	w := newWorker(t, database, stub)
+	w.carryForward(context.Background(), today)
+
+	// Today's day row must have been created.
+	var tDay db.Day
+	require.NoError(t, database.Where(db.Day{Date: today}).First(&tDay).Error)
+
+	// Only the open activity should be carried.
+	var activities []db.ActivityItem
+	require.NoError(t, database.Where("day_id = ?", tDay.ID).Find(&activities).Error)
+	require.Len(t, activities, 1)
+	assert.Equal(t, "repo#1", activities[0].ExternalID)
+
+	// Only the undone task should be carried.
+	var tasks []db.Task
+	require.NoError(t, database.Where("day_id = ?", tDay.ID).Find(&tasks).Error)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "write tests", tasks[0].Title)
+	assert.False(t, tasks[0].Done)
+}
+
+func TestCarryForward_Idempotent(t *testing.T) {
+	database := newTestDB(t)
+	today := utcToday()
+	yesterday := today.AddDate(0, 0, -1)
+
+	yDay := db.Day{Date: yesterday}
+	require.NoError(t, database.Create(&yDay).Error)
+	item := db.ActivityItem{DayID: yDay.ID, Source: "github", ExternalID: "repo#1", Kind: "authored_open", Title: "PR"}
+	require.NoError(t, database.Create(&item).Error)
+	task := db.Task{DayID: yDay.ID, Title: "todo", Done: false}
+	require.NoError(t, database.Create(&task).Error)
+
+	stub := &carryStub{
+		stubConnector: stubConnector{name: "github", configured: true},
+		carryKinds:    map[string]bool{"authored_open": true},
+	}
+	w := newWorker(t, database, stub)
+
+	// Reset carryDone so we can call twice without the guard blocking the second call.
+	w.carryForward(context.Background(), today)
+	delete(w.carryDone, today.Format("2006-01-02"))
+	w.carryForward(context.Background(), today)
+
+	var tDay db.Day
+	require.NoError(t, database.Where(db.Day{Date: today}).First(&tDay).Error)
+
+	var activities []db.ActivityItem
+	require.NoError(t, database.Where("day_id = ?", tDay.ID).Find(&activities).Error)
+	assert.Len(t, activities, 1, "activity must not be duplicated")
+
+	var tasks []db.Task
+	require.NoError(t, database.Where("day_id = ?", tDay.ID).Find(&tasks).Error)
+	assert.Len(t, tasks, 1, "task must not be duplicated")
+}
+
+func TestCarryForward_NoYesterday_NoOp(t *testing.T) {
+	database := newTestDB(t)
+	stub := &carryStub{
+		stubConnector: stubConnector{name: "github", configured: true},
+		carryKinds:    map[string]bool{"authored_open": true},
+	}
+	w := newWorker(t, database, stub)
+	// Must not panic or error.
+	w.carryForward(context.Background(), utcToday())
+
+	var count int64
+	database.Model(&db.Day{}).Count(&count)
+	assert.Equal(t, int64(0), count)
+}
+
+func TestCarryForward_GuardPreventsDoubleRun(t *testing.T) {
+	database := newTestDB(t)
+	today := utcToday()
+	yesterday := today.AddDate(0, 0, -1)
+
+	yDay := db.Day{Date: yesterday}
+	require.NoError(t, database.Create(&yDay).Error)
+	task := db.Task{DayID: yDay.ID, Title: "todo", Done: false}
+	require.NoError(t, database.Create(&task).Error)
+
+	stub := &carryStub{stubConnector: stubConnector{name: "github", configured: true}}
+	w := newWorker(t, database, stub)
+
+	w.carryForward(context.Background(), today)
+	// Manually add a second task to yesterday and run again — guard must block it.
+	task2 := db.Task{DayID: yDay.ID, Title: "second", Done: false}
+	require.NoError(t, database.Create(&task2).Error)
+	w.carryForward(context.Background(), today) // must be a no-op
+
+	var tDay db.Day
+	if err := database.Where(db.Day{Date: today}).First(&tDay).Error; err != nil {
+		// No today row created at all (nothing to carry) — that's fine.
+		return
+	}
+	var tasks []db.Task
+	require.NoError(t, database.Where("day_id = ?", tDay.ID).Find(&tasks).Error)
+	assert.Len(t, tasks, 1, "second run must be blocked by guard")
 }

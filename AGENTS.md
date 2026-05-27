@@ -76,6 +76,9 @@ type Connector interface {
     Fetch(ctx context.Context, date time.Time) ([]db.ActivityItem, error)
     // KindLabel returns a human-readable label for the given kind string.
     KindLabel(kind string) string
+    // ShouldCarryForward reports whether an activity item with this kind should
+    // be copied to the next day when it hasn't been resolved yet.
+    ShouldCarryForward(kind string) bool
 }
 ```
 
@@ -124,9 +127,11 @@ The worker runs a set of tickers in a single goroutine:
 
 | Ticker | Default | What it does |
 |---|---|---|
-| `syncTicker` | `15m` | Runs `syncAll` for today |
+| `syncTicker` | `15m` | Runs `syncAll` for today, then `carryForward` |
 | `refreshTicker` | `5m` | Runs `refreshAllStatuses` across the backfill window |
 | `backupTicker` | `2m` | Writes today's markdown backup (picks up task edits) |
+
+`carryForward` runs once per calendar day per process lifetime (guarded by an in-memory map). It copies yesterday's non-terminal activity items (per `ShouldCarryForward`) and undone tasks into today using upsert / existence checks, so repeated calls are safe.
 
 On startup it runs `runBackfill` synchronously (fetches the last N days) before starting tickers. A sync can also be triggered immediately via `TriggerChan()` (used by the `POST /api/connectors/:name/sync` endpoint).
 
