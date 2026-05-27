@@ -3,6 +3,7 @@ import { api } from './api'
 import { Calendar } from './components/Calendar'
 import { ConnectorStatus } from './components/ConnectorStatus'
 import { DayPage } from './components/DayPage'
+import { Search } from './components/Search'
 import { localToday } from './date'
 
 function initTheme(): 'light' | 'dark' {
@@ -53,37 +54,42 @@ export function App() {
 
   return (
     <div class="app">
-      <aside class="sidebar">
-        <div class="sidebar-top">
+      <div class="app-bar">
+        <div class="app-bar-left">
           <span class="app-title">Daytracker</span>
           <button class="theme-toggle-btn" onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? '☀︎' : '☾'}
           </button>
         </div>
+        <Search onSelect={handleSelectDate} />
+      </div>
 
-        <Calendar
-          year={calYear}
-          month={calMonth}
-          activeDates={activeDates}
-          selectedDate={selectedDate}
-          onSelectDate={handleSelectDate}
-          onMonthChange={(y, m) => { setCalYear(y); setCalMonth(m) }}
-        />
+      <div class="app-body">
+        <aside class="sidebar">
+          <Calendar
+            year={calYear}
+            month={calMonth}
+            activeDates={activeDates}
+            selectedDate={selectedDate}
+            onSelectDate={handleSelectDate}
+            onMonthChange={(y, m) => { setCalYear(y); setCalMonth(m) }}
+          />
 
-        <div class="sidebar-connectors">
-          <ConnectorStatus />
-        </div>
-      </aside>
+          <div class="sidebar-connectors">
+            <ConnectorStatus />
+          </div>
+        </aside>
 
-      <main class="main-panel">
-        <DayPage
-          key={`${selectedDate}-${refreshKey}`}
-          date={selectedDate}
-          isToday={selectedDate === today}
-          onTodayChanged={handleDayChanged}
-          onNavigate={handleSelectDate}
-        />
-      </main>
+        <main class="main-panel">
+          <DayPage
+            key={`${selectedDate}-${refreshKey}`}
+            date={selectedDate}
+            isToday={selectedDate === today}
+            onTodayChanged={handleDayChanged}
+            onNavigate={handleSelectDate}
+          />
+        </main>
+      </div>
     </div>
   )
 }

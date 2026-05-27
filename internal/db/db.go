@@ -22,5 +22,9 @@ func Open() (*gorm.DB, error) {
 		return nil, err
 	}
 
+	if err := SetupFTS(db); err != nil {
+		return nil, err
+	}
+
 	return db, nil
 }

@@ -1,4 +1,4 @@
-import type { ConnectorState, DayDetail, Task } from './types'
+import type { ConnectorState, DayDetail, SearchResult, Task } from './types'
 
 const BASE = '/api'
 
@@ -39,4 +39,12 @@ export const api = {
 
   syncConnector: (name: string) =>
     request<void>(`/connectors/${name}/sync`, { method: 'POST' }),
+
+  search: (q: string, source?: string) => {
+    const params = new URLSearchParams({ q })
+    if (source) params.set('source', source)
+    return request<SearchResult[]>(`/search?${params}`)
+  },
+
+  listSources: () => request<string[]>('/sources'),
 }
