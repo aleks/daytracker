@@ -202,6 +202,10 @@ Each file contains your tasks (as a checklist) and your activity grouped by sour
 
 The directory is plain text — you can commit it to a notes repo, open it in Obsidian or any Markdown editor, or feed individual day files directly to an AI assistant to answer questions like "what did I work on last Tuesday?" or "summarise my Jira activity this week".
 
+## Contributing a connector
+
+Want to add support for a new service? See [docs/connectors.md](docs/connectors.md) for a full walkthrough of the connector interface, kind naming conventions, frontend wiring, and test patterns.
+
 ## Raycast integration
 
 The `raycast-scripts/` directory contains a [Raycast](https://raycast.com) script command that lets you add tasks to today's list directly from the Raycast launcher.
