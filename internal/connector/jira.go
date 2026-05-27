@@ -160,6 +160,45 @@ func (j *JiraConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activit
 	return items, nil
 }
 
+func (j *JiraConnector) IsTerminal(kind string) bool {
+	return kind == "jira_done"
+}
+
+// RefreshStatuses fetches the current status for each non-terminal Jira issue
+// and returns updated kind strings for any that have changed.
+func (j *JiraConnector) RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error) {
+	apiBase, err := j.apiBase(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var updates []PRStatusUpdate
+	for _, item := range items {
+		body, err := j.get(ctx, fmt.Sprintf("%s/rest/api/3/issue/%s?fields=status", apiBase, item.ExternalID))
+		if err != nil {
+			return nil, fmt.Errorf("jira: refresh %s: %w", item.ExternalID, err)
+		}
+
+		var resp struct {
+			Fields struct {
+				Status struct {
+					StatusCategory jiraNameKeyVal `json:"statusCategory"`
+				} `json:"status"`
+			} `json:"fields"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return nil, fmt.Errorf("jira: parse refresh %s: %w", item.ExternalID, err)
+		}
+
+		kind := jiraKind(resp.Fields.Status.StatusCategory.Key)
+		if kind != item.CurrentKind {
+			updates = append(updates, PRStatusUpdate{ExternalID: item.ExternalID, Kind: kind})
+		}
+	}
+
+	return updates, nil
+}
+
 func (j *JiraConnector) get(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
