@@ -17,36 +17,6 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 
 ## Install
 
-### Option 1: Download a prebuilt binary
-
-Download the latest binary for your platform from the [releases page](https://github.com/aleksmaksimow/daytracker/releases).
-
-| Platform | File |
-|---|---|
-| macOS (Apple Silicon) | `daytracker-darwin-arm64` |
-| macOS (Intel) | `daytracker-darwin-amd64` |
-| Linux (x86-64) | `daytracker-linux-amd64` |
-| Linux (ARM64) | `daytracker-linux-arm64` |
-
-```bash
-# Rename to daytracker and make executable
-chmod +x daytracker-darwin-arm64
-mv daytracker-darwin-arm64 daytracker
-
-# Move to a directory on your PATH so you can run it from anywhere
-sudo mv daytracker /usr/local/bin/daytracker
-```
-
-Verify it's accessible:
-
-```bash
-daytracker --help
-```
-
-On macOS you may need to allow the binary under **System Settings → Privacy & Security** on first run before the `daytracker` command works.
-
-### Option 2: Build from source
-
 Requires [Go 1.22+](https://go.dev/dl/) and [Node.js 18+](https://nodejs.org/).
 
 ```bash
@@ -58,7 +28,13 @@ make build
 
 This produces a `./daytracker` binary with the frontend embedded — no separate web server needed.
 
-### Option 3: Development mode
+Move it somewhere on your `PATH` so you can run it from anywhere:
+
+```bash
+sudo mv daytracker /usr/local/bin/daytracker
+```
+
+### Development mode
 
 Requires [Go 1.22+](https://go.dev/dl/) and [Node.js 18+](https://nodejs.org/).
 
