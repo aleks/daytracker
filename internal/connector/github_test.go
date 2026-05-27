@@ -259,3 +259,60 @@ func TestGitHub_RefreshStatuses_BatchedInOneRequest(t *testing.T) {
 	assert.Equal(t, "authored_open", updates[0].Kind)
 	assert.Equal(t, "authored_merged", updates[1].Kind)
 }
+
+// ── Fetch: PR review decision kinds ──────────────────────────────────────────
+
+func TestGitHub_Fetch_InReviewPR(t *testing.T) {
+	authored := []ghPRNode{makePRNode(10, "In Review PR", "https://github.com/org/repo/pull/10", "open", false, "alice", "org/repo")}
+	// Inject reviewDecision directly onto the node.
+	authored[0].ReviewDecision = "REVIEW_REQUIRED"
+	g := newTestGitHub(t, "alice",
+		searchData(authored),
+		searchData([]ghPRNode{}),
+	)
+
+	items, err := g.Fetch(context.Background(), time.Now())
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "authored_in_review", items[0].Kind)
+}
+
+func TestGitHub_Fetch_ApprovedPR(t *testing.T) {
+	authored := []ghPRNode{makePRNode(11, "Approved PR", "https://github.com/org/repo/pull/11", "open", false, "alice", "org/repo")}
+	authored[0].ReviewDecision = "APPROVED"
+	g := newTestGitHub(t, "alice",
+		searchData(authored),
+		searchData([]ghPRNode{}),
+	)
+
+	items, err := g.Fetch(context.Background(), time.Now())
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "authored_approved", items[0].Kind)
+}
+
+// ── ShouldCarryForward ────────────────────────────────────────────────────────
+
+func TestGitHub_ShouldCarryForward(t *testing.T) {
+	g := &GitHubConnector{}
+
+	cases := []struct {
+		kind     string
+		expected bool
+	}{
+		{"authored_open", true},
+		{"authored_draft", true},
+		{"authored_in_review", true},
+		{"authored_approved", true},
+		{"authored_changes_requested", true},
+		{"authored_merged", false},
+		{"authored_closed", false},
+		{"reviewed_open", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.kind, func(t *testing.T) {
+			assert.Equal(t, tc.expected, g.ShouldCarryForward(tc.kind))
+		})
+	}
+}
