@@ -2,27 +2,70 @@
 
 A single-binary daily work tracker. It embeds a Preact frontend and syncs activity from external sources (GitHub, Jira, Confluence) into a local SQLite database.
 
+![daytracker](daytracker.png)
+
+## Prerequisites
+
+- [Go 1.22+](https://go.dev/dl/)
+- [Node.js 18+](https://nodejs.org/) and npm (only needed to build the frontend)
+
+## Install
+
+### Option 1: `go install` (no frontend build needed)
+
+> Only works once a release binary is published. For now, clone and build.
+
+### Option 2: Clone and build
+
+```bash
+git clone https://github.com/aleksmaksimow/daytracker.git
+cd daytracker
+
+# Install frontend dependencies and build the embedded UI
+cd web && npm install && cd ..
+
+# Build the single binary (frontend is embedded)
+make build
+```
+
+This produces a `./daytracker` binary with the frontend baked in — no separate web server needed.
+
+### Option 3: Run without building (development)
+
+```bash
+git clone https://github.com/aleksmaksimow/daytracker.git
+cd daytracker
+cd web && npm install && cd ..
+
+# Terminal 1 — Go API server
+make dev-api
+
+# Terminal 2 — Vite dev server with HMR (proxies /api to :8080)
+make dev-web
+```
+
+Open `http://localhost:5173`.
+
 ## Running
 
 ```bash
-# Copy and fill in your config
+# Copy and fill in your credentials
 cp .env.example .env
+$EDITOR .env
 
-# Build the binary (also builds the frontend)
-make build
-
-# Start
+# Start the server
 ./daytracker
 ```
 
 Open `http://localhost:8080`.
 
-### Development
+## Verify connector credentials
 
 ```bash
-make dev-api   # Go server (no embed, tags=dev)
-make dev-web   # Vite dev server with HMR (proxies /api to :8080)
+make check
 ```
+
+Reads your `.env` and pings each configured connector. Useful for confirming credentials before starting the server.
 
 ## Configuration
 
@@ -42,13 +85,18 @@ Connectors are enabled automatically when their required variables are set. Unco
 
 ### GitHub
 
-Uses the [`gh` CLI](https://cli.github.com) — no token configuration needed in daytracker itself.
+Uses the [GitHub GraphQL API](https://docs.github.com/en/graphql) with a personal access token.
 
-**Requirements:**
-1. Install the `gh` CLI: `brew install gh`
-2. Authenticate: `gh auth login`
+**Required variables:**
 
-That's it. daytracker calls `gh` as a subprocess and inherits whatever account is logged in.
+| Variable | Description |
+|---|---|
+| `DAYTRACKER_GITHUB_TOKEN` | A GitHub personal access token |
+
+**How to create a token:**
+1. Go to <https://github.com/settings/tokens> → **Generate new token (classic)**
+2. Select scopes: `repo`, `read:user`
+3. Copy the token and set it as `DAYTRACKER_GITHUB_TOKEN`
 
 **What it syncs:**
 - Pull requests you authored, created on the target date
