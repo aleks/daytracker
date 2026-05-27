@@ -5,11 +5,25 @@ import { ConnectorStatus } from './components/ConnectorStatus'
 import { DayPage } from './components/DayPage'
 import { localToday } from './date'
 
+function initTheme(): 'light' | 'dark' {
+  const stored = localStorage.getItem('theme')
+  if (stored === 'dark' || stored === 'light') return stored
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 export function App() {
   const today = localToday()
   const [selectedDate, setSelectedDate] = useState(today)
   const [activeDates, setActiveDates] = useState<Set<string>>(new Set())
   const [refreshKey, setRefreshKey] = useState(0)
+  const [theme, setTheme] = useState<'light' | 'dark'>(initTheme)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
 
   const initialYear = parseInt(today.slice(0, 4), 10)
   const initialMonth = parseInt(today.slice(5, 7), 10)
@@ -42,6 +56,9 @@ export function App() {
       <aside class="sidebar">
         <div class="sidebar-top">
           <span class="app-title">Daytracker</span>
+          <button class="theme-toggle-btn" onClick={toggleTheme} title="Toggle theme">
+            {theme === 'dark' ? '☀︎' : '☾'}
+          </button>
         </div>
 
         <Calendar
