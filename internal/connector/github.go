@@ -108,12 +108,13 @@ func (g *GitHubConnector) resolveUsername(ctx context.Context) (string, error) {
 
 // ghPRNode is the shape of a PullRequest node returned from a GraphQL search.
 type ghPRNode struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	State   string `json:"state"`
-	IsDraft bool   `json:"isDraft"`
-	Author  struct {
+	Number         int    `json:"number"`
+	Title          string `json:"title"`
+	URL            string `json:"url"`
+	State          string `json:"state"`
+	IsDraft        bool   `json:"isDraft"`
+	ReviewDecision string `json:"reviewDecision"`
+	Author         struct {
 		Login string `json:"login"`
 	} `json:"author"`
 	Repository struct {
@@ -131,6 +132,7 @@ query($q: String!) {
         url
         state
         isDraft
+        reviewDecision
         author { login }
         repository { nameWithOwner }
       }
@@ -165,7 +167,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 		items = append(items, db.ActivityItem{
 			Source:     "github",
 			ExternalID: id,
-			Kind:       "authored_" + prState(pr.State, pr.IsDraft),
+			Kind:       "authored_" + prStateFromDetail(pr.State, pr.IsDraft, pr.ReviewDecision),
 			Title:      pr.Title,
 			URL:        pr.URL,
 			Metadata:   pr.Repository.NameWithOwner,
