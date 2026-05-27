@@ -29,6 +29,14 @@ export interface DayDetail extends Day {
   activities: ActivityItem[]
 }
 
+export interface SearchResult {
+  date: string
+  type: 'activity' | 'task'
+  source: string
+  title: string
+  url: string
+}
+
 export interface ConnectorState {
   id: number
   name: string

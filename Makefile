@@ -2,19 +2,19 @@
 
 build:
 	cd web && npm run build
-	go build -o daytracker ./cmd/server
+	go build -tags sqlite_fts5 -o daytracker ./cmd/server
 
 dev-api:
-	go run -tags dev ./cmd/server
+	go run -tags "dev sqlite_fts5" ./cmd/server
 
 dev-web:
 	cd web && npm run dev
 
 check:
-	go run -tags dev ./cmd/check
+	go run -tags "dev sqlite_fts5" ./cmd/check
 
 seed:
-	go run ./cmd/seed
+	go run -tags sqlite_fts5 ./cmd/seed
 
 test:
-	go test -tags dev ./...
+	go test -tags "dev sqlite_fts5" ./...

@@ -12,7 +12,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
-RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o daytracker ./cmd/server
+RUN CGO_ENABLED=1 go build -tags sqlite_fts5 -ldflags="-s -w" -o daytracker ./cmd/server
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata

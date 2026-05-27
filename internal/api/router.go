@@ -75,9 +75,10 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 	r := gin.Default()
 	r.Use(corsMiddleware())
 
-	taskH := &TaskHandler{db: database}
-	dayH := &DayHandler{db: database}
-	connH := &ConnectorHandler{db: database, trigger: trigger}
+	taskH   := &TaskHandler{db: database}
+	dayH    := &DayHandler{db: database}
+	connH   := &ConnectorHandler{db: database, trigger: trigger}
+	searchH := &SearchHandler{db: database}
 
 	api := r.Group("/api")
 	{
@@ -106,6 +107,8 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 		api.DELETE("/tasks/:id", taskH.Delete)
 		api.GET("/connectors", connH.List)
 		api.POST("/connectors/:name/sync", connH.Sync)
+		api.GET("/search", searchH.Search)
+		api.GET("/sources", searchH.Sources)
 	}
 
 	if webFS != nil {
