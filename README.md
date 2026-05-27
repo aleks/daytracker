@@ -4,6 +4,17 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 
 ![daytracker](daytracker.png)
 
+## Features
+
+- **Day-by-day activity log** — browse any date and see everything you did across all connected sources in one place
+- **GitHub** — pull requests you authored, reviewed, or commented on; PR statuses (draft → open → in review → approved → merged) kept fresh in the background
+- **Jira** — issues assigned to you that were updated on the day
+- **Confluence** — pages you created, edited, or commented on
+- **Background sync** — a worker fetches fresh activity on a configurable interval and backfills recent history on startup
+- **Single binary** — the Preact frontend is embedded; no separate web server or database process required
+- **Markdown backup** — optionally mirrors every day to a `YYYY/MM/DD.md` file tree (tasks + activity, with links) that you can commit to a notes repo or open in any editor
+- **Local-first** — all data is stored in a single SQLite file on your machine; no cloud account needed
+
 ## Prerequisites
 
 - [Go 1.22+](https://go.dev/dl/)
@@ -78,6 +89,7 @@ All configuration is via environment variables prefixed with `DAYTRACKER_`.
 | `DAYTRACKER_SYNC_INTERVAL` | `15m` | How often the worker fetches fresh activity from all connectors |
 | `DAYTRACKER_STATUS_REFRESH_INTERVAL` | `5m` | How often open PR statuses are re-checked |
 | `DAYTRACKER_BACKFILL_DAYS` | `14` | Number of past days to sync on startup and to keep refreshing statuses for |
+| `DAYTRACKER_BACKUP_DIR` | _(unset)_ | Directory to write daily `YYYY/MM/DD.md` snapshots; backup is disabled when unset |
 
 ## Connectors
 
@@ -147,3 +159,21 @@ See the [Jira connector](#jira) section for instructions on creating an API toke
 **What it syncs:**
 - Pages you created or edited on the target date (`contributor = currentUser()`)
 - Pages you commented on — multiple comments on the same page are grouped into one activity item
+
+---
+
+## Markdown backup
+
+Set `DAYTRACKER_BACKUP_DIR` to any directory and daytracker will write a snapshot for each synced day:
+
+```
+<backup-dir>/
+  2025/
+    05/
+      27.md
+      28.md
+```
+
+Each file contains your tasks (as a checklist) and your activity grouped by source, with titles linked to their original URLs. Files are overwritten on every sync and also refreshed every 2 minutes so task completions land quickly.
+
+The directory is plain text — you can commit it to a notes repo, open it in Obsidian or any Markdown editor, or feed individual day files directly to an AI assistant to answer questions like "what did I work on last Tuesday?" or "summarise my Jira activity this week".
