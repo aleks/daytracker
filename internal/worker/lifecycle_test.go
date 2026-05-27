@@ -81,10 +81,11 @@ func TestRunBackfill_SyncsCorrectNumberOfDays(t *testing.T) {
 	reg := connector.NewRegistry()
 	reg.Register(stub)
 	w := &Worker{
-		db:       database,
-		registry: reg,
-		trigger:  make(chan string, 10),
-		backfill: 5,
+		db:        database,
+		registry:  reg,
+		trigger:   make(chan string, 10),
+		backfill:  5,
+		carryDone: make(map[string]bool),
 	}
 
 	w.runBackfill(context.Background())
@@ -106,10 +107,11 @@ func TestRunBackfill_StopsOnContextCancel(t *testing.T) {
 	reg := connector.NewRegistry()
 	reg.Register(stub)
 	w := &Worker{
-		db:       database,
-		registry: reg,
-		trigger:  make(chan string, 10),
-		backfill: 10,
+		db:        database,
+		registry:  reg,
+		trigger:   make(chan string, 10),
+		backfill:  10,
+		carryDone: make(map[string]bool),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,7 +132,8 @@ func TestRun_ExitsOnContextCancel(t *testing.T) {
 		trigger:         make(chan string, 10),
 		interval:        time.Hour,
 		refreshInterval: time.Hour,
-		backfill:        0, // skip backfill
+		backfill:        0,
+		carryDone:       make(map[string]bool),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -169,6 +172,7 @@ func TestRun_TriggerCausesSync(t *testing.T) {
 		interval:        time.Hour,
 		refreshInterval: time.Hour,
 		backfill:        0,
+		carryDone:       make(map[string]bool),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -194,9 +198,10 @@ type callTrackingConnector struct {
 	onFetch func(time.Time)
 }
 
-func (c *callTrackingConnector) Name() string                 { return c.name }
-func (c *callTrackingConnector) IsConfigured() bool           { return true }
-func (c *callTrackingConnector) KindLabel(kind string) string { return kind }
+func (c *callTrackingConnector) Name() string                      { return c.name }
+func (c *callTrackingConnector) IsConfigured() bool                { return true }
+func (c *callTrackingConnector) KindLabel(kind string) string      { return kind }
+func (c *callTrackingConnector) ShouldCarryForward(_ string) bool  { return false }
 func (c *callTrackingConnector) Fetch(_ context.Context, date time.Time) ([]db.ActivityItem, error) {
 	if c.onFetch != nil {
 		c.onFetch(date)

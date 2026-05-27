@@ -49,6 +49,8 @@ func (c *ConfluenceConnector) IsConfigured() bool {
 	return c.baseURL != "" && c.email != "" && c.token != ""
 }
 
+func (c *ConfluenceConnector) ShouldCarryForward(_ string) bool { return false }
+
 func (c *ConfluenceConnector) KindLabel(kind string) string {
 	switch kind {
 	case "confluence_created":

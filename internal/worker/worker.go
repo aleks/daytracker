@@ -25,6 +25,9 @@ type Worker struct {
 	interval        time.Duration
 	refreshInterval time.Duration
 	backfill        int
+	// carryDone records dates (YYYY-MM-DD) for which carry-forward has already
+	// run this process lifetime, so we don't repeat it on every sync tick.
+	carryDone map[string]bool
 }
 
 func New(database *gorm.DB, registry *connector.Registry) *Worker {
@@ -63,6 +66,7 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 		interval:        interval,
 		refreshInterval: refreshInterval,
 		backfill:        backfill,
+		carryDone:       make(map[string]bool),
 	}
 	log.Printf("worker: sync=%s refresh=%s backfill=%d days", interval, refreshInterval, backfill)
 	return w
@@ -78,6 +82,7 @@ func (w *Worker) Run(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
+	w.carryForward(ctx, utcToday())
 
 	syncTicker := time.NewTicker(w.interval)
 	refreshTicker := time.NewTicker(w.refreshInterval)
@@ -108,10 +113,12 @@ func (w *Worker) Run(ctx context.Context) {
 			} else {
 				w.syncOne(ctx, name, today)
 			}
+			w.carryForward(ctx, today)
 			w.writeBackup(ctx, today)
 		case <-syncTicker.C:
 			today := utcToday()
 			w.syncAll(ctx, today)
+			w.carryForward(ctx, today)
 			w.writeBackup(ctx, today)
 		case <-refreshTicker.C:
 			w.refreshAllStatuses(ctx)
@@ -267,6 +274,104 @@ func (w *Worker) refreshAllStatuses(ctx context.Context) {
 		}
 
 		log.Printf("worker: refreshed %d %s PR statuses", len(updates), c.Name())
+	}
+}
+
+// carryForward copies unfinished activity items and undone tasks from yesterday
+// into today. It runs at most once per calendar day per process lifetime; the
+// upsert logic makes additional runs safe but the guard avoids log noise.
+func (w *Worker) carryForward(ctx context.Context, today time.Time) {
+	key := today.Format("2006-01-02")
+	if w.carryDone[key] {
+		return
+	}
+	w.carryDone[key] = true
+
+	yesterday := today.AddDate(0, 0, -1)
+
+	// ── Activity items ────────────────────────────────────────────────────────
+
+	var yesterdayDay db.Day
+	if err := w.db.Where(db.Day{Date: yesterday}).First(&yesterdayDay).Error; err != nil {
+		// No yesterday row — nothing to carry forward.
+		return
+	}
+
+	var candidates []db.ActivityItem
+	if err := w.db.Where("day_id = ?", yesterdayDay.ID).Find(&candidates).Error; err != nil {
+		log.Printf("worker: carry-forward query activities: %v", err)
+		return
+	}
+
+	var toCarry []db.ActivityItem
+	for _, item := range candidates {
+		c, ok := w.registry.Get(item.Source)
+		if !ok || !c.ShouldCarryForward(item.Kind) {
+			continue
+		}
+		toCarry = append(toCarry, item)
+	}
+
+	var activityCount int
+	if len(toCarry) > 0 {
+		todayDay := db.Day{Date: today}
+		if err := w.db.Where(db.Day{Date: today}).FirstOrCreate(&todayDay).Error; err != nil {
+			log.Printf("worker: carry-forward create today: %v", err)
+			return
+		}
+
+		now := time.Now().UTC()
+		rows := make([]db.ActivityItem, len(toCarry))
+		copy(rows, toCarry)
+		for i := range rows {
+			rows[i].ID = 0
+			rows[i].DayID = todayDay.ID
+			rows[i].FetchedAt = now
+		}
+
+		if err := w.db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}, {Name: "day_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"title", "url", "kind", "metadata", "fetched_at"}),
+		}).Create(&rows).Error; err != nil {
+			log.Printf("worker: carry-forward insert activities: %v", err)
+		} else {
+			activityCount = len(rows)
+		}
+	}
+
+	// ── Tasks ─────────────────────────────────────────────────────────────────
+
+	var yesterdayTasks []db.Task
+	if err := w.db.Where("day_id = ? AND done = ?", yesterdayDay.ID, false).Find(&yesterdayTasks).Error; err != nil {
+		log.Printf("worker: carry-forward query tasks: %v", err)
+		return
+	}
+
+	var taskCount int
+	for _, task := range yesterdayTasks {
+		todayDay := db.Day{Date: today}
+		if err := w.db.Where(db.Day{Date: today}).FirstOrCreate(&todayDay).Error; err != nil {
+			log.Printf("worker: carry-forward create today for task: %v", err)
+			continue
+		}
+
+		// Only insert if this title doesn't already exist for today.
+		var existing int64
+		w.db.Model(&db.Task{}).Where("day_id = ? AND title = ?", todayDay.ID, task.Title).Count(&existing)
+		if existing > 0 {
+			continue
+		}
+
+		newTask := db.Task{DayID: todayDay.ID, Title: task.Title, Done: false}
+		if err := w.db.Create(&newTask).Error; err != nil {
+			log.Printf("worker: carry-forward insert task %q: %v", task.Title, err)
+		} else {
+			taskCount++
+		}
+	}
+
+	if activityCount > 0 || taskCount > 0 {
+		log.Printf("worker: carry-forward %s: %d activities, %d tasks", key, activityCount, taskCount)
 	}
 }
 

@@ -15,9 +15,10 @@ import (
 
 type stubConnector struct{ name string }
 
-func (s *stubConnector) Name() string                    { return s.name }
-func (s *stubConnector) IsConfigured() bool              { return true }
-func (s *stubConnector) KindLabel(kind string) string    { return kind }
+func (s *stubConnector) Name() string                         { return s.name }
+func (s *stubConnector) IsConfigured() bool                   { return true }
+func (s *stubConnector) KindLabel(kind string) string         { return kind }
+func (s *stubConnector) ShouldCarryForward(_ string) bool     { return false }
 func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem, error) {
 	return nil, nil
 }

@@ -67,6 +67,16 @@ func (g *GitHubConnector) KindLabel(kind string) string {
 	}
 }
 
+// ShouldCarryForward carries over authored PRs that are still open or draft.
+// Reviewed PRs are excluded — reviews are date-specific events.
+func (g *GitHubConnector) ShouldCarryForward(kind string) bool {
+	switch kind {
+	case "authored_open", "authored_draft", "authored_in_review", "authored_approved", "authored_changes_requested":
+		return true
+	}
+	return false
+}
+
 func (g *GitHubConnector) IsTerminal(kind string) bool {
 	switch kind {
 	case "authored_merged", "authored_closed", "reviewed_merged", "reviewed_closed":
