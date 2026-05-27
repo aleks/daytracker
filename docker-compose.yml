@@ -1,0 +1,12 @@
+services:
+  daytracker:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    environment:
+      DAYTRACKER_DB_PATH: /data/daytracker.db
+    restart: unless-stopped

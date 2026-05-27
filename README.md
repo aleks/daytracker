@@ -18,6 +18,34 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 
 ## Install
 
+### Docker (no dependencies required)
+
+Requires [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/).
+
+```bash
+git clone https://github.com/aleksmaksimow/daytracker.git
+cd daytracker
+cp .env.example .env
+$EDITOR .env
+docker compose up -d
+```
+
+Open `http://localhost:8080`. The database is stored in `./data/daytracker.db` on the host — it persists across container restarts and rebuilds.
+
+To stop:
+
+```bash
+docker compose down
+```
+
+To rebuild after a code change:
+
+```bash
+docker compose up -d --build
+```
+
+### Build from source
+
 Requires [Go 1.22+](https://go.dev/dl/) and [Node.js 18+](https://nodejs.org/).
 
 ```bash
