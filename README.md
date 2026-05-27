@@ -29,11 +29,21 @@ Download the latest binary for your platform from the [releases page](https://gi
 | Linux (ARM64) | `daytracker-linux-arm64` |
 
 ```bash
+# Rename to daytracker and make executable
 chmod +x daytracker-darwin-arm64
 mv daytracker-darwin-arm64 daytracker
+
+# Move to a directory on your PATH so you can run it from anywhere
+sudo mv daytracker /usr/local/bin/daytracker
 ```
 
-On macOS you may need to allow the binary under **System Settings → Privacy & Security** on first run.
+Verify it's accessible:
+
+```bash
+daytracker --help
+```
+
+On macOS you may need to allow the binary under **System Settings → Privacy & Security** on first run before the `daytracker` command works.
 
 ### Option 2: Build from source
 
