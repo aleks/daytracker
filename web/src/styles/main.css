@@ -25,6 +25,20 @@
   --font-size-xl: 24px;
 }
 
+[data-theme="dark"] {
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a1a;
+  --color-border: #2e2e2e;
+  --color-text: #e8e8e8;
+  --color-text-muted: #888888;
+  --color-accent: #3b82f6;
+  --color-done: #6b7280;
+  --color-error: #f87171;
+  --color-github: #c9d1d9;
+  --color-jira: #4c9aff;
+  --color-confluence: #4c9aff;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -59,6 +73,9 @@ body {
 }
 
 .sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--space-md) var(--space-md) var(--space-sm);
   border-bottom: 1px solid var(--color-border);
 }
@@ -573,6 +590,35 @@ body {
 .activity-badge--merged   { color: #7c3aed; border-color: #ddd6fe; background: #f5f3ff; }
 .activity-badge--closed   { color: var(--color-text-muted); border-color: var(--color-border); background: var(--color-surface); }
 
+/* ── Dark mode badge overrides ─────────────────────────────────── */
+
+[data-theme="dark"] .activity-badge--open     { color: #4ade80; border-color: #166534; background: #052e16; }
+[data-theme="dark"] .activity-badge--draft    { color: var(--color-text-muted); border-color: var(--color-border); background: var(--color-surface); }
+[data-theme="dark"] .activity-badge--review   { color: #fbbf24; border-color: #78350f; background: #1c1107; }
+[data-theme="dark"] .activity-badge--approved { color: #4ade80; border-color: #166534; background: #052e16; font-weight: 600; }
+[data-theme="dark"] .activity-badge--changes  { color: #f87171; border-color: #7f1d1d; background: #1c0505; }
+[data-theme="dark"] .activity-badge--merged   { color: #a78bfa; border-color: #4c1d95; background: #130c2a; }
+[data-theme="dark"] .activity-badge--closed   { color: var(--color-text-muted); border-color: var(--color-border); background: var(--color-surface); }
+
+/* ── Theme toggle ──────────────────────────────────────────────── */
+
+.theme-toggle-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 8px;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
 /* ── Connector status ──────────────────────────────────────────── */
 
 .connector-status {
@@ -589,11 +635,12 @@ body {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  color: var(--color-text);
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
   width: 100%;
 }
 
