@@ -20,7 +20,7 @@ func main() {
 	today := utcDay(time.Now())
 	rng := rand.New(rand.NewSource(42))
 
-	for daysAgo := 7; daysAgo >= 0; daysAgo-- {
+	for daysAgo := 21; daysAgo >= 0; daysAgo-- {
 		date := today.AddDate(0, 0, -daysAgo)
 		// Skip weekends
 		if date.Weekday() == time.Saturday || date.Weekday() == time.Sunday {
@@ -65,6 +65,11 @@ var taskPool = []struct {
 	{"Document connector interface", true},
 	{"Set up local dev seed script", true},
 	{"Bump Go toolchain to 1.25", true},
+	{"Triage open security advisories", true},
+	{"Write postmortem for Monday's outage", true},
+	{"Prototype new dashboard layout", false},
+	{"Coordinate with infra on cert rotation", true},
+	{"Review architecture proposal from Sam", false},
 }
 
 func seedTasks(database *gorm.DB, rng *rand.Rand, day db.Day, date time.Time) {
@@ -90,14 +95,18 @@ var githubPRs = []struct {
 	url   string
 	kind  string
 }{
-	{"pr-101", "feat(auth): add OAuth2 PKCE flow", "https://github.com/example/api/pull/101", "pr_created"},
-	{"pr-102", "fix(db): handle null foreign key on user delete", "https://github.com/example/api/pull/102", "pr_created"},
-	{"pr-103", "refactor(search): extract query builder", "https://github.com/example/api/pull/103", "pr_review"},
-	{"pr-104", "chore: upgrade gin to v1.12", "https://github.com/example/api/pull/104", "pr_review"},
-	{"pr-105", "feat(notifications): add email digest", "https://github.com/example/platform/pull/105", "pr_created"},
-	{"pr-106", "fix(cache): invalidate on profile update", "https://github.com/example/platform/pull/106", "pr_review"},
-	{"pr-107", "test(integration): add cart checkout suite", "https://github.com/example/platform/pull/107", "pr_review"},
-	{"pr-108", "docs: update API reference for v2 endpoints", "https://github.com/example/docs/pull/108", "pr_created"},
+	{"pr-101", "feat(auth): add OAuth2 PKCE flow", "https://github.com/example/api/pull/101", "authored_open"},
+	{"pr-102", "fix(db): handle null foreign key on user delete", "https://github.com/example/api/pull/102", "authored_merged"},
+	{"pr-103", "refactor(search): extract query builder", "https://github.com/example/api/pull/103", "reviewed_approved"},
+	{"pr-104", "chore: upgrade gin to v1.12", "https://github.com/example/api/pull/104", "reviewed_merged"},
+	{"pr-105", "feat(notifications): add email digest", "https://github.com/example/platform/pull/105", "authored_draft"},
+	{"pr-106", "fix(cache): invalidate on profile update", "https://github.com/example/platform/pull/106", "reviewed_changes_requested"},
+	{"pr-107", "test(integration): add cart checkout suite", "https://github.com/example/platform/pull/107", "reviewed_open"},
+	{"pr-108", "docs: update API reference for v2 endpoints", "https://github.com/example/docs/pull/108", "authored_open"},
+	{"pr-109", "perf(query): batch load user preferences", "https://github.com/example/api/pull/109", "authored_merged"},
+	{"pr-110", "fix(worker): prevent duplicate carry-forward on restart", "https://github.com/example/api/pull/110", "authored_open"},
+	{"pr-111", "chore(deps): bump axios to 1.7", "https://github.com/example/web/pull/111", "reviewed_merged"},
+	{"pr-112", "feat(search): add fuzzy matching", "https://github.com/example/api/pull/112", "reviewed_approved"},
 }
 
 var jiraTickets = []struct {
@@ -106,14 +115,16 @@ var jiraTickets = []struct {
 	url   string
 	kind  string
 }{
-	{"ENG-441", "Investigate memory leak in session store", "https://jira.example.com/browse/ENG-441", "in_progress"},
-	{"ENG-452", "Add rate limiting to /api/search", "https://jira.example.com/browse/ENG-452", "in_review"},
-	{"ENG-463", "Migrate user table to UUID primary keys", "https://jira.example.com/browse/ENG-463", "in_progress"},
-	{"ENG-471", "Deprecate v1 auth endpoints", "https://jira.example.com/browse/ENG-471", "done"},
-	{"ENG-485", "Add structured logging to worker service", "https://jira.example.com/browse/ENG-485", "in_progress"},
-	{"ENG-490", "Fix incorrect timezone handling in reports", "https://jira.example.com/browse/ENG-490", "done"},
-	{"ENG-501", "Spike: evaluate NATS vs Kafka for event bus", "https://jira.example.com/browse/ENG-501", "in_progress"},
-	{"PLAT-22", "Automate DB snapshot to S3", "https://jira.example.com/browse/PLAT-22", "done"},
+	{"ENG-441", "Investigate memory leak in session store", "https://jira.example.com/browse/ENG-441", "jira_in_progress"},
+	{"ENG-452", "Add rate limiting to /api/search", "https://jira.example.com/browse/ENG-452", "jira_in_progress"},
+	{"ENG-463", "Migrate user table to UUID primary keys", "https://jira.example.com/browse/ENG-463", "jira_todo"},
+	{"ENG-471", "Deprecate v1 auth endpoints", "https://jira.example.com/browse/ENG-471", "jira_done"},
+	{"ENG-485", "Add structured logging to worker service", "https://jira.example.com/browse/ENG-485", "jira_in_progress"},
+	{"ENG-490", "Fix incorrect timezone handling in reports", "https://jira.example.com/browse/ENG-490", "jira_done"},
+	{"ENG-501", "Spike: evaluate NATS vs Kafka for event bus", "https://jira.example.com/browse/ENG-501", "jira_in_progress"},
+	{"PLAT-22", "Automate DB snapshot to S3", "https://jira.example.com/browse/PLAT-22", "jira_done"},
+	{"ENG-512", "Add OpenTelemetry tracing to API gateway", "https://jira.example.com/browse/ENG-512", "jira_todo"},
+	{"ENG-520", "Reduce cold start time for Lambda functions", "https://jira.example.com/browse/ENG-520", "jira_in_progress"},
 }
 
 var confluencePages = []struct {
@@ -122,12 +133,14 @@ var confluencePages = []struct {
 	url   string
 	kind  string
 }{
-	{"page-1001", "ADR-014: Caching Strategy for API Responses", "https://confluence.example.com/pages/1001", "page_created"},
-	{"page-1002", "Runbook: Deploying the Auth Service", "https://confluence.example.com/pages/1002", "page_edited"},
-	{"page-1003", "Q3 Engineering Roadmap Draft", "https://confluence.example.com/pages/1003", "comment_added"},
-	{"page-1004", "On-Call Playbook: Database Incidents", "https://confluence.example.com/pages/1004", "comment_added"},
-	{"page-1005", "Architecture Overview: Event-Driven Platform", "https://confluence.example.com/pages/1005", "page_created"},
-	{"page-1006", "Team Agreements & Norms", "https://confluence.example.com/pages/1006", "comment_added"},
+	{"page-1001", "ADR-014: Caching Strategy for API Responses", "https://confluence.example.com/pages/1001", "confluence_created"},
+	{"page-1002", "Runbook: Deploying the Auth Service", "https://confluence.example.com/pages/1002", "confluence_edited"},
+	{"page-1003", "Q3 Engineering Roadmap Draft", "https://confluence.example.com/pages/1003", "confluence_commented"},
+	{"page-1004", "On-Call Playbook: Database Incidents", "https://confluence.example.com/pages/1004", "confluence_commented"},
+	{"page-1005", "Architecture Overview: Event-Driven Platform", "https://confluence.example.com/pages/1005", "confluence_created"},
+	{"page-1006", "Team Agreements & Norms", "https://confluence.example.com/pages/1006", "confluence_edited"},
+	{"page-1007", "Incident Review: 2026-05-12 Outage", "https://confluence.example.com/pages/1007", "confluence_created"},
+	{"page-1008", "Onboarding Guide: Backend Services", "https://confluence.example.com/pages/1008", "confluence_edited"},
 }
 
 func seedActivities(database *gorm.DB, rng *rand.Rand, day db.Day, date time.Time) {
@@ -182,7 +195,7 @@ func seedActivities(database *gorm.DB, rng *rand.Rand, day db.Day, date time.Tim
 	}
 
 	database.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}},
+		Columns:   []clause.Column{{Name: "source"}, {Name: "external_id"}, {Name: "day_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"title", "url", "kind", "fetched_at"}),
 	}).Create(&items)
 }

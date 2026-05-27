@@ -1,4 +1,4 @@
-.PHONY: build dev-api dev-web check
+.PHONY: build dev-api dev-web check seed
 
 build:
 	cd web && npm run build
@@ -12,3 +12,6 @@ dev-web:
 
 check:
 	go run -tags dev ./cmd/check
+
+seed:
+	go run ./cmd/seed
