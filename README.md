@@ -129,6 +129,7 @@ All configuration is via environment variables prefixed with `DAYTRACKER_`.
 
 | Variable | Default | Description |
 |---|---|---|
+| `DAYTRACKER_ADDRESS` | `0.0.0.0` | Listening address for the server |
 | `DAYTRACKER_PORT` | `8080` | HTTP port the server listens on |
 | `DAYTRACKER_DB_PATH` | `./daytracker.db` | Path to the SQLite database file |
 | `DAYTRACKER_SYNC_INTERVAL` | `15m` | How often the worker fetches fresh activity from all connectors |
