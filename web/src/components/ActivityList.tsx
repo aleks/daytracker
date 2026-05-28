@@ -1,3 +1,4 @@
+import { useState } from 'preact/hooks'
 import type { ActivityItem } from '../types'
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -52,12 +53,18 @@ const ROLE_LABELS: Record<string, string> = {
   reviewed: 'Reviewed',
 }
 
+// Find all Jira-style ticket keys (e.g. MOI-1234, ABC-99) in a string.
+function extractKeys(s: string): string[] {
+  return (s.match(/\b[A-Z][A-Z0-9]+-\d+\b/g) ?? []).map((k: string) => k.toUpperCase())
+}
+
 interface Props {
   activities: ActivityItem[]
   source: string
+  allActivities?: ActivityItem[]
 }
 
-export function ActivityList({ activities, source }: Props) {
+export function ActivityList({ activities, source, allActivities = [] }: Props) {
   if (activities.length === 0) {
     return <p class="activity-empty">No activity recorded.</p>
   }
@@ -78,7 +85,7 @@ export function ActivityList({ activities, source }: Props) {
             <div key={role ?? 'other'} class="activity-subgroup">
               {role && <span class="activity-subgroup-label">{ROLE_LABELS[role]}</span>}
               <ul class="activity-items">
-                {list.map(item => <ActivityRow key={item.id} item={item} color={color} />)}
+                {list.map(item => <ActivityRow key={item.id} item={item} color={color} allActivities={allActivities} />)}
               </ul>
             </div>
           ))}
@@ -88,21 +95,79 @@ export function ActivityList({ activities, source }: Props) {
 
   return (
     <ul class="activity-items">
-      {activities.map(item => <ActivityRow key={item.id} item={item} color={color} />)}
+      {activities.map(item => (
+        <ActivityRow key={item.id} item={item} color={color} allActivities={allActivities} />
+      ))}
     </ul>
   )
 }
 
-function ActivityRow({ item, color }: { item: ActivityItem; color: string }) {
+function ActivityRow({ item, color, allActivities }: { item: ActivityItem; color: string; allActivities: ActivityItem[] }) {
   const meta = kindMeta(item.kind)
+  const [expanded, setExpanded] = useState(false)
+
+  // Jira row: find GitHub PRs whose title contains this ticket key.
+  const linkedPRs = item.source === 'jira'
+    ? allActivities.filter(a => a.source === 'github' && extractKeys(a.title).includes(item.external_id.toUpperCase()))
+    : []
+
+  // GitHub PR row: find Jira tickets whose key appears in this PR title.
+  const linkedJira = item.source === 'github'
+    ? (() => {
+        const keys = extractKeys(item.title)
+        return allActivities.filter(a => a.source === 'jira' && keys.includes(a.external_id.toUpperCase()))
+      })()
+    : []
+
   return (
-    <li class="activity-item" style={{ borderLeftColor: color }}>
-      {item.url ? (
-        <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
-      ) : (
-        <span>{item.title}</span>
+    <li class={`activity-item${expanded ? ' activity-item--expanded' : ''}`} style={{ borderLeftColor: color }}>
+      <div class="activity-item-main">
+        {item.url ? (
+          <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+        ) : (
+          <span>{item.title}</span>
+        )}
+        <div class="activity-item-actions">
+          {linkedJira.map(ticket => (
+            <a
+              key={ticket.id}
+              class="activity-ticket-chip"
+              href={ticket.url || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={ticket.title}
+            >
+              {ticket.external_id}
+            </a>
+          ))}
+          {linkedPRs.length > 0 && (
+            <button
+              class={`activity-prs-btn${expanded ? ' activity-prs-btn--active' : ''}`}
+              onClick={() => setExpanded(e => !e)}
+            >
+              {linkedPRs.length} {linkedPRs.length === 1 ? 'Pull Request' : 'Pull Requests'}
+            </button>
+          )}
+          <span class={`activity-badge activity-badge--${meta.badge}`}>{meta.label}</span>
+        </div>
+      </div>
+      {expanded && linkedPRs.length > 0 && (
+        <ul class="activity-linked-prs">
+          {linkedPRs.map(pr => {
+            const prMeta = kindMeta(pr.kind)
+            return (
+              <li key={pr.id} class="activity-linked-pr">
+                {pr.url ? (
+                  <a href={pr.url} target="_blank" rel="noopener noreferrer">{pr.title}</a>
+                ) : (
+                  <span>{pr.title}</span>
+                )}
+                <span class={`activity-badge activity-badge--${prMeta.badge}`}>{prMeta.label}</span>
+              </li>
+            )
+          })}
+        </ul>
       )}
-      <span class={`activity-badge activity-badge--${meta.badge}`}>{meta.label}</span>
     </li>
   )
 }
