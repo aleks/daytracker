@@ -95,7 +95,7 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
             return sources.map(source => (
               <div key={source} class="day-section">
                 <h3 class="section-heading">{SOURCE_LABELS[source] ?? source}</h3>
-                <ActivityList activities={bySource[source]} source={source} />
+                <ActivityList activities={bySource[source]} source={source} allActivities={detail.activities} />
               </div>
             ))
           })()}

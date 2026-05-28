@@ -571,13 +571,26 @@ body {
 
 .activity-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-left: 3px solid var(--color-border);
   background: var(--color-bg);
   border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.activity-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.activity-item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
 }
 
 .activity-item a {
@@ -586,6 +599,61 @@ body {
 }
 
 .activity-item a:hover {
+  text-decoration: underline;
+}
+
+.activity-ticket-chip,
+.activity-prs-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  padding: 1px var(--space-sm);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.activity-ticket-chip:hover {
+  background: var(--color-surface);
+  border-color: var(--color-jira);
+  color: var(--color-jira);
+}
+
+.activity-prs-btn:hover,
+.activity-prs-btn--active {
+  background: var(--color-surface);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.activity-linked-prs {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--color-border);
+  margin-left: var(--space-xs);
+}
+
+.activity-linked-pr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.activity-linked-pr a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.activity-linked-pr a:hover {
   text-decoration: underline;
 }
 
