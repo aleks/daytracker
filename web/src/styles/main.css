@@ -979,88 +979,16 @@ body {
 
 /* ── Bar chart ─────────────────────────────────────────────────── */
 
-.barchart {
+.dash-chart-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: var(--space-md);
 }
 
-.barchart-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 180px;
-  overflow: hidden;
-}
-
-.barchart-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-  min-width: 0;
-}
-
-.barchart-stack {
-  display: flex;
-  flex-direction: column-reverse;
+.barchart-wrap {
   width: 100%;
-  border-radius: 2px 2px 0 0;
-  overflow: hidden;
 }
-
-.barchart-fill {
-  min-height: 0;
-  transition: flex 0.2s;
-}
-
-.barchart-fill--github     { background: var(--color-github); }
-.barchart-fill--jira       { background: var(--color-jira); }
-.barchart-fill--confluence { background: var(--color-confluence); }
-.barchart-fill--tasks      { background: var(--color-accent); opacity: 0.6; }
-.barchart-fill--empty      { background: transparent; }
-
-.barchart-label {
-  font-size: 9px;
-  color: var(--color-text-muted);
-  margin-top: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  text-align: center;
-}
-
-.barchart-legend {
-  display: flex;
-  gap: var(--space-md);
-  margin-top: var(--space-sm);
-  flex-wrap: wrap;
-}
-
-.barchart-legend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-
-.barchart-legend-item::before {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.barchart-legend-item--github::before     { background: var(--color-github); }
-.barchart-legend-item--jira::before       { background: var(--color-jira); }
-.barchart-legend-item--confluence::before { background: var(--color-confluence); }
-.barchart-legend-item--tasks::before      { background: var(--color-accent); opacity: 0.6; }
 
 /* ── Source breakdowns ─────────────────────────────────────────── */
 
