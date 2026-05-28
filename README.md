@@ -211,7 +211,7 @@ See the [Jira connector](#jira) section for instructions on creating an API toke
 
 ### YouTrack
 
-Uses the [YouTrack REST API](https://www.jetbrains.com/help/youtrack/devportal/api-landing.html) with a permanent token.
+Uses the [YouTrack REST API](https://www.jetbrains.com/help/youtrack/devportal/youtrack-rest-api.html) with a permanent token.
 
 **Required variables:**
 
