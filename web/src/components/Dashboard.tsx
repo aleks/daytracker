@@ -1,4 +1,14 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { api } from '../api'
 import type { StatsDayBucket, StatsResponse } from '../types'
 
@@ -36,12 +46,23 @@ function startOfYear(date: string): string {
 
 function formatDate(s: string): string {
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  })
 }
 
 function formatMonth(s: string): string {
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' })
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    month: 'short', year: 'numeric', timeZone: 'UTC',
+  })
+}
+
+function formatWeek(s: string): string {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
+  })
 }
 
 // ── Preset definitions ────────────────────────────────────────────────────────
@@ -66,7 +87,6 @@ interface Bucket {
   github: number
   jira: number
   confluence: number
-  total: number
 }
 
 function aggregateTimeline(timeline: StatsDayBucket[], from: string, to: string): Bucket[] {
@@ -74,17 +94,16 @@ function aggregateTimeline(timeline: StatsDayBucket[], from: string, to: string)
 
   const first = from || timeline[0].date
   const last = to || timeline[timeline.length - 1].date
+  const [fy, fm, fd] = first.split('-').map(Number)
+  const [ly, lm, ld] = last.split('-').map(Number)
   const days = Math.round(
-    (new Date(last + 'T00:00:00').getTime() - new Date(first + 'T00:00:00').getTime()) /
-    86400000,
+    (Date.UTC(ly, lm - 1, ld) - Date.UTC(fy, fm - 1, fd)) / 86400000,
   ) + 1
 
-  // Index timeline by date for O(1) lookup.
   const byDate: Record<string, StatsDayBucket> = {}
   for (const b of timeline) byDate[b.date] = b
 
   if (days <= 60) {
-    // Daily — one bucket per calendar day in range
     const buckets: Bucket[] = []
     let cur = first
     while (cur <= last) {
@@ -95,7 +114,6 @@ function aggregateTimeline(timeline: StatsDayBucket[], from: string, to: string)
         github: b?.github ?? 0,
         jira: b?.jira ?? 0,
         confluence: b?.confluence ?? 0,
-        total: (b?.tasks_done ?? 0) + (b?.github ?? 0) + (b?.jira ?? 0) + (b?.confluence ?? 0),
       })
       cur = addDays(cur, 1)
     }
@@ -103,13 +121,12 @@ function aggregateTimeline(timeline: StatsDayBucket[], from: string, to: string)
   }
 
   if (days <= 365) {
-    // Weekly — ISO week starting Monday
     const bucketMap: Record<string, Bucket> = {}
     let cur = first
     while (cur <= last) {
       const weekStart = startOfWeek(cur)
       if (!bucketMap[weekStart]) {
-        bucketMap[weekStart] = { label: weekStart, tasks_done: 0, github: 0, jira: 0, confluence: 0, total: 0 }
+        bucketMap[weekStart] = { label: weekStart, tasks_done: 0, github: 0, jira: 0, confluence: 0 }
       }
       const b = byDate[cur]
       if (b) {
@@ -117,27 +134,45 @@ function aggregateTimeline(timeline: StatsDayBucket[], from: string, to: string)
         bucketMap[weekStart].github += b.github
         bucketMap[weekStart].jira += b.jira
         bucketMap[weekStart].confluence += b.confluence
-        bucketMap[weekStart].total += b.tasks_done + b.github + b.jira + b.confluence
       }
       cur = addDays(cur, 1)
     }
     return Object.keys(bucketMap).sort().map(k => bucketMap[k])
   }
 
-  // Monthly
   const bucketMap: Record<string, Bucket> = {}
   for (const b of timeline) {
     const month = b.date.slice(0, 7)
     if (!bucketMap[month]) {
-      bucketMap[month] = { label: month + '-01', tasks_done: 0, github: 0, jira: 0, confluence: 0, total: 0 }
+      bucketMap[month] = { label: month + '-01', tasks_done: 0, github: 0, jira: 0, confluence: 0 }
     }
     bucketMap[month].tasks_done += b.tasks_done
     bucketMap[month].github += b.github
     bucketMap[month].jira += b.jira
     bucketMap[month].confluence += b.confluence
-    bucketMap[month].total += b.tasks_done + b.github + b.jira + b.confluence
   }
   return Object.keys(bucketMap).sort().map(k => bucketMap[k])
+}
+
+// ── Chart colors (match CSS variables — duplicated here for Recharts) ─────────
+
+const COLORS = {
+  github:     '#24292e',
+  jira:       '#0052cc',
+  confluence: '#0065ff',
+  tasks:      '#2563eb',
+}
+
+const COLORS_DARK = {
+  github:     '#c9d1d9',
+  jira:       '#4c9aff',
+  confluence: '#4c9aff',
+  tasks:      '#3b82f6',
+}
+
+function useChartColors() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark'
+  return dark ? COLORS_DARK : COLORS
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -152,42 +187,64 @@ function StatCard({ label, value, sub }: { label: string; value: number; sub?: s
   )
 }
 
-function BarChart({ buckets, granularity }: { buckets: Bucket[]; granularity: 'day' | 'week' | 'month' }) {
-  const max = Math.max(...buckets.map(b => b.total), 1)
+function ActivityChart({ buckets, granularity }: { buckets: Bucket[]; granularity: 'day' | 'week' | 'month' }) {
+  const colors = useChartColors()
 
-  function labelFor(b: Bucket): string {
-    if (granularity === 'month') return formatMonth(b.label)
-    if (granularity === 'week')  return 'W/' + b.label.slice(5)
-    return b.label.slice(5) // MM-DD
+  function tickFormatter(label: string): string {
+    if (granularity === 'month') return formatMonth(label)
+    if (granularity === 'week')  return formatWeek(label)
+    return label.slice(5) // MM-DD
   }
 
-  // Show at most ~30 labels to avoid crowding
-  const labelInterval = Math.ceil(buckets.length / 30)
+  function tooltipLabel(label: string): string {
+    if (granularity === 'month') return formatMonth(label)
+    if (granularity === 'week')  return `Week of ${formatDate(label)}`
+    return formatDate(label)
+  }
+
+  // Thin out x-axis ticks to avoid crowding — at most ~12 visible labels.
+  const interval = Math.max(0, Math.ceil(buckets.length / 12) - 1)
 
   return (
-    <div class="barchart">
-      <div class="barchart-bars">
-        {buckets.map((b, i) => (
-          <div key={b.label} class="barchart-col" title={`${formatDate(b.label)}: ${b.total} items`}>
-            <div class="barchart-stack" style={{ height: '100%' }}>
-              <div class="barchart-fill barchart-fill--github"    style={{ flex: b.github }} />
-              <div class="barchart-fill barchart-fill--jira"      style={{ flex: b.jira }} />
-              <div class="barchart-fill barchart-fill--confluence" style={{ flex: b.confluence }} />
-              <div class="barchart-fill barchart-fill--tasks"     style={{ flex: b.tasks_done }} />
-              <div class="barchart-fill barchart-fill--empty"     style={{ flex: max - b.total }} />
-            </div>
-            {i % labelInterval === 0 && (
-              <div class="barchart-label">{labelFor(b)}</div>
-            )}
-          </div>
-        ))}
-      </div>
-      <div class="barchart-legend">
-        <span class="barchart-legend-item barchart-legend-item--github">GitHub</span>
-        <span class="barchart-legend-item barchart-legend-item--jira">Jira</span>
-        <span class="barchart-legend-item barchart-legend-item--confluence">Confluence</span>
-        <span class="barchart-legend-item barchart-legend-item--tasks">Tasks done</span>
-      </div>
+    <div class="barchart-wrap">
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={buckets} margin={{ top: 4, right: 8, left: -16, bottom: 0 }} barCategoryGap="20%">
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tickFormatter={tickFormatter}
+            interval={interval}
+            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            labelFormatter={tooltipLabel}
+            contentStyle={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '6px',
+              fontSize: '12px',
+            }}
+            labelStyle={{ color: 'var(--color-text)', fontWeight: 600, marginBottom: 4 }}
+            itemStyle={{ color: 'var(--color-text)' }}
+            cursor={{ fill: 'var(--color-border)', opacity: 0.5 }}
+          />
+          <Legend
+            wrapperStyle={{ fontSize: '12px', paddingTop: '12px', color: 'var(--color-text-muted)' }}
+          />
+          <Bar dataKey="github"     name="GitHub"     stackId="a" fill={colors.github}     radius={[0, 0, 0, 0]} />
+          <Bar dataKey="jira"       name="Jira"       stackId="a" fill={colors.jira}       radius={[0, 0, 0, 0]} />
+          <Bar dataKey="confluence" name="Confluence" stackId="a" fill={colors.confluence} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="tasks_done" name="Tasks done" stackId="a" fill={colors.tasks}      radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }
@@ -239,9 +296,8 @@ export function Dashboard() {
 
   const granularity: 'day' | 'week' | 'month' = useMemo(() => {
     if (buckets.length === 0) return 'day'
-    const days = buckets.length
-    if (days > 365 / 30) return 'month'
-    if (days > 60) return 'week'
+    if (buckets.length > 365 / 30) return 'month'
+    if (buckets.length > 60) return 'week'
     return 'day'
   }, [buckets])
 
@@ -257,15 +313,14 @@ export function Dashboard() {
   }
 
   const PRESETS: { key: Preset; label: string }[] = [
-    { key: 'week', label: 'This week' },
+    { key: 'week',  label: 'This week' },
     { key: 'month', label: 'This month' },
-    { key: 'year', label: 'This year' },
-    { key: 'all', label: 'All time' },
+    { key: 'year',  label: 'This year' },
+    { key: 'all',   label: 'All time' },
   ]
 
   return (
     <div class="dashboard">
-      {/* Period selector */}
       <div class="dash-period-bar">
         <div class="dash-presets">
           {PRESETS.map(p => (
@@ -306,7 +361,6 @@ export function Dashboard() {
 
       {data && !loading && (
         <>
-          {/* Summary cards */}
           <div class="dash-cards">
             <StatCard
               label="Tasks completed"
@@ -315,65 +369,64 @@ export function Dashboard() {
                 ? `${Math.round(data.summary.tasks_done / data.summary.tasks_total * 100)}% of ${data.summary.tasks_total}`
                 : undefined}
             />
-            <StatCard label="PRs authored" value={data.github.authored_total} sub={`${data.github.authored_merged} merged`} />
-            <StatCard label="PRs reviewed" value={data.github.reviewed_total} sub={`${data.github.reviewed_merged} merged`} />
-            <StatCard label="Jira tickets" value={data.jira.total} sub={`${data.jira.done} done`} />
-            <StatCard label="Confluence pages" value={data.confluence.total} sub={`${data.confluence.created} created`} />
-            <StatCard label="Active days" value={data.period.active_days} />
+            <StatCard label="PRs authored"      value={data.github.authored_total}  sub={`${data.github.authored_merged} merged`} />
+            <StatCard label="PRs reviewed"      value={data.github.reviewed_total}  sub={`${data.github.reviewed_merged} merged`} />
+            <StatCard label="Jira tickets"      value={data.jira.total}             sub={`${data.jira.done} done`} />
+            <StatCard label="Confluence pages"  value={data.confluence.total}       sub={`${data.confluence.created} created`} />
+            <StatCard label="Active days"       value={data.period.active_days} />
           </div>
 
-          {/* Timeline bar chart */}
           {buckets.length > 0 && (
             <div class="dash-section">
               <div class="dash-section-title">Activity over time</div>
-              <BarChart buckets={buckets} granularity={granularity} />
+              <div class="dash-chart-card">
+                <ActivityChart buckets={buckets} granularity={granularity} />
+              </div>
             </div>
           )}
 
-          {/* Per-source breakdowns */}
           <div class="dash-section">
             <div class="dash-section-title">Breakdown by source</div>
             <div class="dash-breakdowns">
               <SourceBlock
                 title="GitHub — Authored PRs"
                 rows={[
-                  { label: 'Merged', value: data.github.authored_merged, highlight: true },
-                  { label: 'Open', value: data.github.authored_open },
-                  { label: 'Approved', value: data.github.authored_approved },
-                  { label: 'In review', value: data.github.authored_in_review },
+                  { label: 'Merged',            value: data.github.authored_merged,            highlight: true },
+                  { label: 'Open',              value: data.github.authored_open },
+                  { label: 'Approved',          value: data.github.authored_approved },
+                  { label: 'In review',         value: data.github.authored_in_review },
                   { label: 'Changes requested', value: data.github.authored_changes_requested },
-                  { label: 'Draft', value: data.github.authored_draft },
-                  { label: 'Closed', value: data.github.authored_closed },
+                  { label: 'Draft',             value: data.github.authored_draft },
+                  { label: 'Closed',            value: data.github.authored_closed },
                 ]}
               />
               <SourceBlock
                 title="GitHub — Reviewed PRs"
                 rows={[
                   { label: 'Merged', value: data.github.reviewed_merged, highlight: true },
-                  { label: 'Open', value: data.github.reviewed_open },
-                  { label: 'Draft', value: data.github.reviewed_draft },
+                  { label: 'Open',   value: data.github.reviewed_open },
+                  { label: 'Draft',  value: data.github.reviewed_draft },
                   { label: 'Closed', value: data.github.reviewed_closed },
                 ]}
               />
               <SourceBlock
                 title="Jira"
                 rows={[
-                  { label: 'Done', value: data.jira.done, highlight: true },
+                  { label: 'Done',        value: data.jira.done,        highlight: true },
                   { label: 'In progress', value: data.jira.in_progress },
-                  { label: 'To do', value: data.jira.todo },
+                  { label: 'To do',       value: data.jira.todo },
                 ]}
               />
               <SourceBlock
                 title="Confluence"
                 rows={[
                   { label: 'Pages created', value: data.confluence.created, highlight: true },
-                  { label: 'Pages edited', value: data.confluence.edited },
+                  { label: 'Pages edited',  value: data.confluence.edited },
                 ]}
               />
             </div>
           </div>
 
-          {/* Top busiest days */}
           {data.top_days.length > 0 && (
             <div class="dash-section">
               <div class="dash-section-title">Most active days</div>
