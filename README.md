@@ -3,6 +3,7 @@
 A single-binary daily work tracker. It embeds a Preact frontend and syncs activity from external sources (GitHub, Jira, Confluence) into a local SQLite database.
 
 ![daytracker](daytracker.png)
+![daytracker dashboard](daytracker2.png)
 
 ## Features
 
