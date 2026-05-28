@@ -1,9 +1,12 @@
+*.db
+.crush/
+.devenv*
+.env
+/check
+/server
+data/
 daytracker
 daytracker.db
-*.db
+devenv.local.nix
 web/dist/
 web/node_modules/
-.env
-/server
-/check
-data/

@@ -84,6 +84,24 @@ make dev-web
 
 Open `http://localhost:5173`.
 
+### Development with devenv
+
+Requires [devenv](https://devenv.sh/) and [Nix](https://nixos.org/).
+
+```bash
+git clone https://github.com/aleksmaksimow/daytracker.git
+cd daytracker
+devenv up
+```
+
+This starts the Go API server and the Vite dev server in a single command, with auto-reload on file changes. Open `http://localhost:5173`. The repository also provides the following scripts:
+
+```bash
+devenv shell build  # build server + frontend
+devenv shell test   # run all tests
+devenv shell check  # connector health check
+```
+
 ## Running
 
 ```bash
