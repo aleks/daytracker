@@ -79,6 +79,7 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 	dayH    := &DayHandler{db: database}
 	connH   := &ConnectorHandler{db: database, trigger: trigger}
 	searchH := &SearchHandler{db: database}
+	statsH  := &StatsHandler{db: database}
 
 	api := r.Group("/api")
 	{
@@ -109,6 +110,7 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 		api.POST("/connectors/:name/sync", connH.Sync)
 		api.GET("/search", searchH.Search)
 		api.GET("/sources", searchH.Sources)
+		api.GET("/stats", statsH.Get)
 	}
 
 	if webFS != nil {
