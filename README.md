@@ -10,6 +10,8 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 - **GitHub** — pull requests you authored, reviewed, or commented on; PR statuses (draft → open → in review → approved → merged) kept fresh in the background
 - **Jira** — issues assigned to you that were updated on the day
 - **Confluence** — pages you created, edited, or commented on
+- **Full-text search** — a search bar in the top bar lets you search across all activity and tasks with autocomplete; filter by source (GitHub, Jira, Confluence, or tasks only)
+- **Dashboard** — a dedicated view with stat cards, a stacked bar chart of activity over time, per-source breakdowns, and your most active days; supports preset periods (this week / month / year / all time) and a custom date range
 - **Background sync** — a worker fetches fresh activity on a configurable interval and backfills recent history on startup
 - **Single binary** — the Preact frontend is embedded; no separate web server or database process required
 - **Markdown backup** — optionally mirrors every day to a `YYYY/MM/DD.md` file tree (tasks + activity, with links) that you can commit to a notes repo or open in any editor
@@ -201,6 +203,29 @@ Set `DAYTRACKER_BACKUP_DIR` to any directory and daytracker will write a snapsho
 Each file contains your tasks (as a checklist) and your activity grouped by source, with titles linked to their original URLs. Files are overwritten on every sync and also refreshed every 2 minutes so task completions land quickly.
 
 The directory is plain text — you can commit it to a notes repo, open it in Obsidian or any Markdown editor, or feed individual day files directly to an AI assistant to answer questions like "what did I work on last Tuesday?" or "summarise my Jira activity this week".
+
+## Search
+
+A search bar is always visible in the top bar. Start typing to get an autocomplete dropdown of up to 15 matching activity items and tasks from across all your data.
+
+- **Filter by source** — use the dropdown to the left of the input to limit results to a specific connector (GitHub, Jira, Confluence) or to tasks only
+- **Keyboard navigation** — use ↑ / ↓ to move through results, Enter to select, Escape to close
+- Selecting a result navigates the Journal to the day the item was recorded
+
+Search is powered by SQLite FTS5 with prefix matching, so partial words work (searching "auth" will match "authentication").
+
+## Dashboard
+
+Switch to the Dashboard view using the **Journal / Dashboard** toggle in the top bar.
+
+The dashboard shows a summary of your productivity across a selected time period:
+
+- **Stat cards** — tasks completed (with completion rate), PRs authored and reviewed, Jira tickets, Confluence pages, and active days
+- **Activity over time** — a stacked bar chart showing GitHub, Jira, Confluence, and task activity; granularity adjusts automatically (daily for ≤60 days, weekly for ≤365 days, monthly beyond that)
+- **Breakdown by source** — per-kind counts for each connector (e.g. authored merged vs open vs draft PRs, Jira done vs in progress)
+- **Most active days** — your top 5 days by total activity volume
+
+**Period selection:** use the preset chips (This week / This month / This year / All time) or enter a custom date range and click Apply.
 
 ## Contributing a connector
 
