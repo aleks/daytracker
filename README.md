@@ -11,6 +11,7 @@ A single-binary daily work tracker. It embeds a Preact frontend and syncs activi
 - **GitHub** — pull requests you authored, reviewed, or commented on; PR statuses (draft → open → in review → approved → merged) kept fresh in the background
 - **Jira** — issues assigned to you that were updated on the day
 - **Confluence** — pages you created, edited, or commented on
+- **YouTrack** — issues you created, edited, resolved, or logged time on
 - **Full-text search** — a search bar in the top bar lets you search across all activity and tasks with autocomplete; filter by source (GitHub, Jira, Confluence, or tasks only)
 - **Dashboard** — a dedicated view with stat cards, a stacked bar chart of activity over time, per-source breakdowns, and your most active days; supports preset periods (this week / month / year / all time) and a custom date range
 - **Background sync** — a worker fetches fresh activity on a configurable interval and backfills recent history on startup
@@ -205,6 +206,30 @@ See the [Jira connector](#jira) section for instructions on creating an API toke
 **What it syncs:**
 - Pages you created or edited on the target date (`contributor = currentUser()`)
 - Pages you commented on — multiple comments on the same page are grouped into one activity item
+
+---
+
+### YouTrack
+
+Uses the [YouTrack REST API](https://www.jetbrains.com/help/youtrack/devportal/api-landing.html) with a permanent token.
+
+**Required variables:**
+
+| Variable | Description |
+|---|---|
+| `DAYTRACKER_YOUTRACK_BASE_URL` | Your YouTrack instance URL, e.g. `https://example.youtrack.cloud` |
+| `DAYTRACKER_YOUTRACK_TOKEN` | A permanent YouTrack authentication token (starts with `perm-`) |
+
+**How to create a token:**
+1. Go to `$DAYTRACKER_YOUTRACK_BASE_URL/youtrack/users/me?tab=account-security` (open your profile → **Account Security**)
+2. Under **Permanent Tokens**, click **Create token**, give it a name, and copy the value
+3. Set it as `DAYTRACKER_YOUTRACK_TOKEN`
+
+**What it syncs:**
+- Issues you created on the target date
+- Issues you edited (summary, description, or custom field changes)
+- Issues you resolved on the target date
+- Time entries (work items) you logged on the target date
 
 ---
 
