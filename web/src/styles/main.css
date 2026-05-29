@@ -10,6 +10,7 @@
   --color-github: #24292e;
   --color-jira: #0052cc;
   --color-confluence: #0065ff;
+  --color-youtrack: #ff008c;
 
   --radius: 6px;
   --space-xs: 4px;
@@ -37,6 +38,7 @@
   --color-github: #c9d1d9;
   --color-jira: #4c9aff;
   --color-confluence: #4c9aff;
+  --color-youtrack: #ff008c;
 }
 
 *, *::before, *::after {

@@ -33,8 +33,14 @@ func main() {
 	registry.Register(connector.NewGitHub())
 	registry.Register(connector.NewJira())
 	registry.Register(connector.NewConfluence())
+	registry.Register(connector.NewYouTrack())
 
 	w := worker.New(database, registry)
+
+	address := os.Getenv("DAYTRACKER_ADDRESS")
+	if address == "" {
+		address = "0.0.0.0"
+	}
 
 	port := os.Getenv("DAYTRACKER_PORT")
 	if port == "" {
@@ -44,7 +50,7 @@ func main() {
 	router := api.NewRouter(database, daytracker.WebFS(), w.TriggerChan())
 
 	srv := &http.Server{
-		Addr:    ":" + port,
+		Addr:   address + ":" + port,
 		Handler: router,
 	}
 
