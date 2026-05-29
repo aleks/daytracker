@@ -113,13 +113,19 @@ The worker updates rows **by primary key** (`id`), not by `(source, external_id)
 
 ### Kind naming convention
 
-Kinds are `<source>_<state>` strings stored in `ActivityItem.Kind`. They drive both the UI badge and the backup markdown label. Examples:
+Kinds are `<source>_<state>` strings stored in `ActivityItem.Kind`. They drive both the UI badge and the backup markdown label. The full set of kinds per connector:
 
-- GitHub: `authored_open`, `authored_merged`, `authored_closed`, `authored_draft`, `reviewed_open`, `reviewed_merged`, `reviewed_approved`, `reviewed_changes_requested`
+- GitHub: `authored_open`, `authored_merged`, `authored_closed`, `authored_draft`, `authored_approved`, `authored_in_review`, `authored_changes_requested`, `reviewed_open`, `reviewed_merged`, `reviewed_closed`, `reviewed_draft`, `reviewed_approved`, `reviewed_in_review`, `reviewed_changes_requested`
 - Jira: `jira_todo`, `jira_in_progress`, `jira_done`
-- Confluence: `confluence_created`, `confluence_edited`
+- Confluence: `confluence_created`, `confluence_edited`, `confluence_commented`
 
-When adding a new kind, also update `KindLabel()` on the connector and the badge mapping in `web/src/components/ActivityList.tsx`. The backup writer calls `connector.KindLabel()` directly — there is no central `kindLabel` function to update.
+When adding a new kind, you **must** update all three of the following — they are separate mappings that must stay in sync:
+
+1. **`KindLabel(kind string) string`** on the connector (`internal/connector/<name>.go`) — used by the Markdown backup writer (`internal/backup/backup.go`). Every kind the connector can produce must have an explicit case; the `default` fallback returns the raw kind string which is not user-friendly.
+2. **`KIND_META` / `STATE_META`** in `web/src/components/ActivityList.tsx` — drives the badge label and colour in the UI.
+3. **`SOURCE_COLORS`** and the CSS badge variant in `web/src/styles/main.css` if the new kind requires a new badge style.
+
+The backup writer calls `connector.KindLabel()` directly — there is no central kind registry.
 
 ## Worker (`internal/worker/worker.go`)
 

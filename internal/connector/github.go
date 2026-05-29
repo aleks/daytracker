@@ -48,6 +48,12 @@ func (g *GitHubConnector) KindLabel(kind string) string {
 		return "closed"
 	case "authored_draft":
 		return "draft"
+	case "authored_approved":
+		return "approved"
+	case "authored_in_review":
+		return "in review"
+	case "authored_changes_requested":
+		return "changes requested"
 	case "reviewed_open":
 		return "reviewed · open"
 	case "reviewed_merged":
