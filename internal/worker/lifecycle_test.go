@@ -85,6 +85,7 @@ func TestRunBackfill_SyncsCorrectNumberOfDays(t *testing.T) {
 		registry:  reg,
 		trigger:   make(chan string, 10),
 		backfill:  5,
+		loc:       time.UTC,
 		carryDone: make(map[string]bool),
 	}
 
@@ -111,6 +112,7 @@ func TestRunBackfill_StopsOnContextCancel(t *testing.T) {
 		registry:  reg,
 		trigger:   make(chan string, 10),
 		backfill:  10,
+		loc:       time.UTC,
 		carryDone: make(map[string]bool),
 	}
 
@@ -133,6 +135,7 @@ func TestRun_ExitsOnContextCancel(t *testing.T) {
 		interval:        time.Hour,
 		refreshInterval: time.Hour,
 		backfill:        0,
+		loc:             time.UTC,
 		carryDone:       make(map[string]bool),
 	}
 
@@ -172,6 +175,7 @@ func TestRun_TriggerCausesSync(t *testing.T) {
 		interval:        time.Hour,
 		refreshInterval: time.Hour,
 		backfill:        0,
+		loc:             time.UTC,
 		carryDone:       make(map[string]bool),
 	}
 
