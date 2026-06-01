@@ -25,6 +25,7 @@ type Worker struct {
 	interval        time.Duration
 	refreshInterval time.Duration
 	backfill        int
+	loc             *time.Location
 	// carryDone records dates (YYYY-MM-DD) for which carry-forward has already
 	// run this process lifetime, so we don't repeat it on every sync tick.
 	carryDone map[string]bool
@@ -52,6 +53,15 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 		}
 	}
 
+	loc := time.Local
+	if tz := os.Getenv("DAYTRACKER_TIMEZONE"); tz != "" {
+		if l, err := time.LoadLocation(tz); err != nil {
+			log.Printf("worker: invalid DAYTRACKER_TIMEZONE %q: %v; falling back to local time", tz, err)
+		} else {
+			loc = l
+		}
+	}
+
 	var bw *backup.Writer
 	if root := os.Getenv("DAYTRACKER_BACKUP_DIR"); root != "" {
 		bw = backup.New(root, database, registry)
@@ -66,9 +76,10 @@ func New(database *gorm.DB, registry *connector.Registry) *Worker {
 		interval:        interval,
 		refreshInterval: refreshInterval,
 		backfill:        backfill,
+		loc:             loc,
 		carryDone:       make(map[string]bool),
 	}
-	log.Printf("worker: sync=%s refresh=%s backfill=%d days", interval, refreshInterval, backfill)
+	log.Printf("worker: sync=%s refresh=%s backfill=%d days timezone=%s", interval, refreshInterval, backfill, loc)
 	return w
 }
 
@@ -82,7 +93,7 @@ func (w *Worker) Run(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	w.carryForward(ctx, utcToday())
+	w.carryForward(ctx, w.today())
 
 	syncTicker := time.NewTicker(w.interval)
 	refreshTicker := time.NewTicker(w.refreshInterval)
@@ -107,7 +118,7 @@ func (w *Worker) Run(ctx context.Context) {
 			refreshWg.Wait()
 			return
 		case name := <-w.trigger:
-			today := utcToday()
+			today := w.today()
 			if name == "" {
 				w.syncAll(ctx, today)
 			} else {
@@ -116,21 +127,21 @@ func (w *Worker) Run(ctx context.Context) {
 			w.carryForward(ctx, today)
 			w.writeBackup(ctx, today)
 		case <-syncTicker.C:
-			today := utcToday()
+			today := w.today()
 			w.syncAll(ctx, today)
 			w.carryForward(ctx, today)
 			w.writeBackup(ctx, today)
 		case <-refreshTicker.C:
 			w.refreshAllStatuses(ctx)
 		case <-backupTicker.C:
-			w.writeBackup(ctx, utcToday())
+			w.writeBackup(ctx, w.today())
 		}
 	}
 }
 
 func (w *Worker) runBackfill(ctx context.Context) {
 	log.Printf("worker: starting backfill for %d days", w.backfill)
-	today := utcToday()
+	today := w.today()
 	for i := 0; i < w.backfill; i++ {
 		if ctx.Err() != nil {
 			log.Printf("worker: backfill interrupted at day %d", i)
@@ -224,7 +235,7 @@ func (w *Worker) syncOne(ctx context.Context, name string, date time.Time) error
 // StatusRefresher and updates the kind of non-terminal activity items that fall
 // within the backfill window (i.e. the same age threshold used for fetching).
 func (w *Worker) refreshAllStatuses(ctx context.Context) {
-	cutoff := utcToday().AddDate(0, 0, -w.backfill)
+	cutoff := w.today().AddDate(0, 0, -w.backfill)
 
 	for _, c := range w.registry.All() {
 		refresher, ok := c.(connector.StatusRefresher)
@@ -375,6 +386,12 @@ func (w *Worker) carryForward(ctx context.Context, today time.Time) {
 	}
 }
 
+func (w *Worker) today() time.Time {
+	now := time.Now().In(w.loc)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, w.loc)
+}
+
+// utcToday returns today's date at midnight UTC. Used by tests.
 func utcToday() time.Time {
 	now := time.Now().UTC()
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)

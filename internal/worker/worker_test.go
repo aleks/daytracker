@@ -44,6 +44,7 @@ func newWorker(t *testing.T, database *gorm.DB, connectors ...connector.Connecto
 		interval:        time.Hour,
 		refreshInterval: time.Hour,
 		backfill:        3,
+		loc:             time.UTC,
 		carryDone:       make(map[string]bool),
 	}
 }

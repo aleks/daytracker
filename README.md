@@ -117,6 +117,7 @@ All configuration is via environment variables prefixed with `DAYTRACKER_`.
 | `DAYTRACKER_STATUS_REFRESH_INTERVAL` | `5m` | How often open PR statuses are re-checked |
 | `DAYTRACKER_BACKFILL_DAYS` | `14` | Number of past days to sync on startup and to keep refreshing statuses for |
 | `DAYTRACKER_BACKUP_DIR` | _(unset)_ | Directory to write daily `YYYY/MM/DD.md` snapshots; backup is disabled when unset |
+| `DAYTRACKER_TIMEZONE` | system local | IANA timezone name (e.g. `America/New_York`, `Europe/Berlin`) used by the worker when determining "today". Set this when running on a server in a different timezone from your working hours |
 
 ## Connectors
 
