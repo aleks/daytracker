@@ -46,6 +46,19 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
       .catch(err => setError(err.message))
   }, [date])
 
+  // Poll for updated activity items every 60s when viewing today.
+  // Only activities are merged — tasks state is left untouched so any
+  // in-progress task form entry is not disrupted.
+  useEffect(() => {
+    if (!isToday) return
+    const id = setInterval(() => {
+      api.getDay(date)
+        .then(fresh => setDetail(prev => prev ? { ...prev, activities: fresh.activities } : fresh))
+        .catch(() => { /* silent — stale data is fine */ })
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [isToday, date])
+
   const handleTasksChanged = (tasks: Task[]) => {
     if (!detail) return
     setDetail({ ...detail, tasks })
