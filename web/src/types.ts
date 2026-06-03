@@ -103,6 +103,27 @@ export interface StatsResponse {
   top_days: StatsTopDay[]
 }
 
+export interface VelocityMetric {
+  avg_days: number
+  sample_size: number
+}
+
+export interface SlowestItem {
+  source: string
+  external_id: string
+  title: string
+  url: string
+  days: number
+  kind: string
+}
+
+export interface VelocityResponse {
+  github_authored: VelocityMetric
+  jira: VelocityMetric
+  tasks: VelocityMetric
+  slowest: SlowestItem[]
+}
+
 export interface ConnectorState {
   id: number
   name: string

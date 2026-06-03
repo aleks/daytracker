@@ -75,11 +75,12 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 	r := gin.Default()
 	r.Use(corsMiddleware())
 
-	taskH   := &TaskHandler{db: database}
-	dayH    := &DayHandler{db: database}
-	connH   := &ConnectorHandler{db: database, trigger: trigger}
-	searchH := &SearchHandler{db: database}
-	statsH  := &StatsHandler{db: database}
+	taskH     := &TaskHandler{db: database}
+	dayH      := &DayHandler{db: database}
+	connH     := &ConnectorHandler{db: database, trigger: trigger}
+	searchH   := &SearchHandler{db: database}
+	statsH    := &StatsHandler{db: database}
+	velocityH := &VelocityHandler{db: database}
 
 	api := r.Group("/api")
 	{
@@ -111,6 +112,7 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 		api.GET("/search", searchH.Search)
 		api.GET("/sources", searchH.Sources)
 		api.GET("/stats", statsH.Get)
+		api.GET("/stats/velocity", velocityH.Get)
 	}
 
 	if webFS != nil {
