@@ -48,10 +48,11 @@ export const api = {
 
   listSources: () => request<string[]>('/sources'),
 
-  getStats: (from?: string, to?: string) => {
+  getStats: (from?: string, to?: string, mode?: 'unique' | 'raw') => {
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to) params.set('to', to)
+    if (mode) params.set('mode', mode)
     const qs = params.toString()
     return request<StatsResponse>(`/stats${qs ? '?' + qs : ''}`)
   },

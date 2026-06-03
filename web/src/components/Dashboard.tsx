@@ -196,10 +196,11 @@ function ActivityChart({ buckets, granularity }: { buckets: Bucket[]; granularit
     return label.slice(5) // MM-DD
   }
 
-  function tooltipLabel(label: string): string {
-    if (granularity === 'month') return formatMonth(label)
-    if (granularity === 'week')  return `Week of ${formatDate(label)}`
-    return formatDate(label)
+  function tooltipLabel(label: unknown): string {
+    const s = String(label)
+    if (granularity === 'month') return formatMonth(s)
+    if (granularity === 'week')  return `Week of ${formatDate(s)}`
+    return formatDate(s)
   }
 
   // Thin out x-axis ticks to avoid crowding — at most ~12 visible labels.
@@ -274,6 +275,7 @@ export function Dashboard() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [usingCustom, setUsingCustom] = useState(false)
+  const [mode, setMode] = useState<'unique' | 'raw'>('unique')
   const [data, setData] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -283,11 +285,11 @@ export function Dashboard() {
 
   useEffect(() => {
     setLoading(true)
-    api.getStats(from || undefined, to || undefined)
+    api.getStats(from || undefined, to || undefined, mode)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [from, to])
+  }, [from, to, mode])
 
   const buckets = useMemo(() => {
     if (!data) return []
@@ -332,6 +334,22 @@ export function Dashboard() {
               {p.label}
             </button>
           ))}
+        </div>
+        <div class="dash-mode-toggle">
+          <button
+            class={`dash-mode-btn${mode === 'unique' ? ' dash-mode-btn--active' : ''}`}
+            onClick={() => setMode('unique')}
+            title="Count each item once, using its latest state"
+          >
+            Unique
+          </button>
+          <button
+            class={`dash-mode-btn${mode === 'raw' ? ' dash-mode-btn--active' : ''}`}
+            onClick={() => setMode('raw')}
+            title="Count every row including carry-forward duplicates"
+          >
+            All appearances
+          </button>
         </div>
         <div class="dash-custom-range">
           <input

@@ -25,6 +25,7 @@ type StatsPeriod struct {
 	From       string `json:"from"`
 	To         string `json:"to"`
 	ActiveDays int    `json:"active_days"`
+	Unique     bool   `json:"unique"`
 }
 
 type StatsSummary struct {
@@ -34,19 +35,19 @@ type StatsSummary struct {
 }
 
 type StatsGitHub struct {
-	AuthoredTotal          int `json:"authored_total"`
-	AuthoredMerged         int `json:"authored_merged"`
-	AuthoredOpen           int `json:"authored_open"`
-	AuthoredDraft          int `json:"authored_draft"`
-	AuthoredApproved       int `json:"authored_approved"`
+	AuthoredTotal            int `json:"authored_total"`
+	AuthoredMerged           int `json:"authored_merged"`
+	AuthoredOpen             int `json:"authored_open"`
+	AuthoredDraft            int `json:"authored_draft"`
+	AuthoredApproved         int `json:"authored_approved"`
 	AuthoredChangesRequested int `json:"authored_changes_requested"`
-	AuthoredInReview       int `json:"authored_in_review"`
-	AuthoredClosed         int `json:"authored_closed"`
-	ReviewedTotal          int `json:"reviewed_total"`
-	ReviewedMerged         int `json:"reviewed_merged"`
-	ReviewedOpen           int `json:"reviewed_open"`
-	ReviewedDraft          int `json:"reviewed_draft"`
-	ReviewedClosed         int `json:"reviewed_closed"`
+	AuthoredInReview         int `json:"authored_in_review"`
+	AuthoredClosed           int `json:"authored_closed"`
+	ReviewedTotal            int `json:"reviewed_total"`
+	ReviewedMerged           int `json:"reviewed_merged"`
+	ReviewedOpen             int `json:"reviewed_open"`
+	ReviewedDraft            int `json:"reviewed_draft"`
+	ReviewedClosed           int `json:"reviewed_closed"`
 }
 
 type StatsJira struct {
@@ -79,9 +80,9 @@ type StatsTopDay struct {
 func (h *StatsHandler) Get(c *gin.Context) {
 	from := c.Query("from")
 	to := c.Query("to")
+	unique := c.Query("mode") == "unique"
 
 	// Build the WHERE clause fragments for date filtering.
-	// Using substr(d.date, 1, 10) works regardless of how the time.Time is serialised.
 	fromCond := "(? = '' OR substr(d.date, 1, 10) >= ?)"
 	toCond := "(? = '' OR substr(d.date, 1, 10) <= ?)"
 	dateArgs := []any{from, from, to, to}
@@ -89,6 +90,7 @@ func (h *StatsHandler) Get(c *gin.Context) {
 	var resp StatsResponse
 	resp.Period.From = from
 	resp.Period.To = to
+	resp.Period.Unique = unique
 
 	// ── Summary: tasks ────────────────────────────────────────────────────────
 
@@ -97,25 +99,52 @@ func (h *StatsHandler) Get(c *gin.Context) {
 		Done  int
 	}
 	var taskSummary taskSummaryRow
-	h.db.Raw(`
-		SELECT COUNT(*) as total,
-		       SUM(CASE WHEN t.done = 1 THEN 1 ELSE 0 END) as done
-		FROM tasks t
-		JOIN days d ON d.id = t.day_id
-		WHERE `+fromCond+` AND `+toCond,
-		dateArgs...,
-	).Scan(&taskSummary)
+	if unique {
+		// Count distinct task titles; a title is "done" if it was ever completed
+		// within the period. Carry-forward never copies done tasks, so MAX(done)
+		// per title effectively means "was this task completed in the period."
+		h.db.Raw(`
+			SELECT COUNT(*) as total, COALESCE(SUM(ever_done), 0) as done
+			FROM (
+				SELECT t.title,
+				       MAX(CASE WHEN t.done = 1 THEN 1 ELSE 0 END) as ever_done
+				FROM tasks t
+				JOIN days d ON d.id = t.day_id
+				WHERE `+fromCond+` AND `+toCond+`
+				GROUP BY t.title
+			) AS s`,
+			dateArgs...,
+		).Scan(&taskSummary)
+	} else {
+		h.db.Raw(`
+			SELECT COUNT(*) as total,
+			       SUM(CASE WHEN t.done = 1 THEN 1 ELSE 0 END) as done
+			FROM tasks t
+			JOIN days d ON d.id = t.day_id
+			WHERE `+fromCond+` AND `+toCond,
+			dateArgs...,
+		).Scan(&taskSummary)
+	}
 	resp.Summary.TasksTotal = taskSummary.Total
 	resp.Summary.TasksDone = taskSummary.Done
 
 	// ── Summary: activities total ─────────────────────────────────────────────
 
-	h.db.Raw(`
-		SELECT COUNT(*) FROM activity_items ai
-		JOIN days d ON d.id = ai.day_id
-		WHERE `+fromCond+` AND `+toCond,
-		dateArgs...,
-	).Scan(&resp.Summary.ActivitiesTotal)
+	if unique {
+		h.db.Raw(`
+			SELECT COUNT(DISTINCT ai.external_id) FROM activity_items ai
+			JOIN days d ON d.id = ai.day_id
+			WHERE `+fromCond+` AND `+toCond,
+			dateArgs...,
+		).Scan(&resp.Summary.ActivitiesTotal)
+	} else {
+		h.db.Raw(`
+			SELECT COUNT(*) FROM activity_items ai
+			JOIN days d ON d.id = ai.day_id
+			WHERE `+fromCond+` AND `+toCond,
+			dateArgs...,
+		).Scan(&resp.Summary.ActivitiesTotal)
+	}
 
 	// ── Active days ───────────────────────────────────────────────────────────
 
@@ -129,23 +158,52 @@ func (h *StatsHandler) Get(c *gin.Context) {
 		dateArgs...,
 	).Scan(&resp.Period.ActiveDays)
 
-	// ── GitHub breakdown by kind ──────────────────────────────────────────────
+	// ── Activity kind breakdown (shared logic for GitHub, Jira, Confluence) ──
+	//
+	// In unique mode we pick the most recent occurrence of each external_id
+	// within the date window (latest day, latest fetch within that day) so that
+	// a carried-forward PR is counted once at its current state.
 
 	type kindCountRow struct {
 		Kind string
 		Cnt  int
 	}
-	var githubKinds []kindCountRow
-	h.db.Raw(`
-		SELECT ai.kind, COUNT(*) as cnt
-		FROM activity_items ai
-		JOIN days d ON d.id = ai.day_id
-		WHERE ai.source = 'github'
-		  AND `+fromCond+` AND `+toCond+`
-		GROUP BY ai.kind`,
-		dateArgs...,
-	).Scan(&githubKinds)
-	for _, r := range githubKinds {
+
+	queryKinds := func(source string) []kindCountRow {
+		var rows []kindCountRow
+		if unique {
+			h.db.Raw(`
+				SELECT kind, COUNT(*) as cnt FROM (
+					SELECT ai.kind,
+					       ROW_NUMBER() OVER (
+					           PARTITION BY ai.external_id
+					           ORDER BY d.date DESC, ai.fetched_at DESC
+					       ) AS rn
+					FROM activity_items ai
+					JOIN days d ON d.id = ai.day_id
+					WHERE ai.source = ?
+					  AND `+fromCond+` AND `+toCond+`
+				) AS ranked WHERE rn = 1
+				GROUP BY kind`,
+				append([]any{source}, dateArgs...)...,
+			).Scan(&rows)
+		} else {
+			h.db.Raw(`
+				SELECT ai.kind, COUNT(*) as cnt
+				FROM activity_items ai
+				JOIN days d ON d.id = ai.day_id
+				WHERE ai.source = ?
+				  AND `+fromCond+` AND `+toCond+`
+				GROUP BY ai.kind`,
+				append([]any{source}, dateArgs...)...,
+			).Scan(&rows)
+		}
+		return rows
+	}
+
+	// ── GitHub ────────────────────────────────────────────────────────────────
+
+	for _, r := range queryKinds("github") {
 		switch r.Kind {
 		case "authored_merged":
 			resp.GitHub.AuthoredMerged = r.Cnt
@@ -178,19 +236,9 @@ func (h *StatsHandler) Get(c *gin.Context) {
 	resp.GitHub.ReviewedTotal = resp.GitHub.ReviewedMerged + resp.GitHub.ReviewedOpen +
 		resp.GitHub.ReviewedDraft + resp.GitHub.ReviewedClosed
 
-	// ── Jira breakdown by kind ────────────────────────────────────────────────
+	// ── Jira ─────────────────────────────────────────────────────────────────
 
-	var jiraKinds []kindCountRow
-	h.db.Raw(`
-		SELECT ai.kind, COUNT(*) as cnt
-		FROM activity_items ai
-		JOIN days d ON d.id = ai.day_id
-		WHERE ai.source = 'jira'
-		  AND `+fromCond+` AND `+toCond+`
-		GROUP BY ai.kind`,
-		dateArgs...,
-	).Scan(&jiraKinds)
-	for _, r := range jiraKinds {
+	for _, r := range queryKinds("jira") {
 		switch r.Kind {
 		case "jira_done":
 			resp.Jira.Done = r.Cnt
@@ -202,19 +250,9 @@ func (h *StatsHandler) Get(c *gin.Context) {
 	}
 	resp.Jira.Total = resp.Jira.Done + resp.Jira.InProgress + resp.Jira.Todo
 
-	// ── Confluence breakdown by kind ──────────────────────────────────────────
+	// ── Confluence ────────────────────────────────────────────────────────────
 
-	var confluenceKinds []kindCountRow
-	h.db.Raw(`
-		SELECT ai.kind, COUNT(*) as cnt
-		FROM activity_items ai
-		JOIN days d ON d.id = ai.day_id
-		WHERE ai.source = 'confluence'
-		  AND `+fromCond+` AND `+toCond+`
-		GROUP BY ai.kind`,
-		dateArgs...,
-	).Scan(&confluenceKinds)
-	for _, r := range confluenceKinds {
+	for _, r := range queryKinds("confluence") {
 		switch r.Kind {
 		case "confluence_created":
 			resp.Confluence.Created = r.Cnt
@@ -224,7 +262,7 @@ func (h *StatsHandler) Get(c *gin.Context) {
 	}
 	resp.Confluence.Total = resp.Confluence.Created + resp.Confluence.Edited
 
-	// ── Timeline: daily buckets (activities by source) ────────────────────────
+	// ── Timeline: daily buckets ───────────────────────────────────────────────
 
 	type activityDayRow struct {
 		Day    string
@@ -232,33 +270,57 @@ func (h *StatsHandler) Get(c *gin.Context) {
 		Cnt    int
 	}
 	var activityDays []activityDayRow
-	h.db.Raw(`
-		SELECT substr(d.date, 1, 10) as day, ai.source, COUNT(*) as cnt
-		FROM activity_items ai
-		JOIN days d ON d.id = ai.day_id
-		WHERE `+fromCond+` AND `+toCond+`
-		GROUP BY substr(d.date, 1, 10), ai.source
-		ORDER BY day`,
-		dateArgs...,
-	).Scan(&activityDays)
+	if unique {
+		h.db.Raw(`
+			SELECT substr(d.date, 1, 10) as day, ai.source, COUNT(DISTINCT ai.external_id) as cnt
+			FROM activity_items ai
+			JOIN days d ON d.id = ai.day_id
+			WHERE `+fromCond+` AND `+toCond+`
+			GROUP BY substr(d.date, 1, 10), ai.source
+			ORDER BY day`,
+			dateArgs...,
+		).Scan(&activityDays)
+	} else {
+		h.db.Raw(`
+			SELECT substr(d.date, 1, 10) as day, ai.source, COUNT(*) as cnt
+			FROM activity_items ai
+			JOIN days d ON d.id = ai.day_id
+			WHERE `+fromCond+` AND `+toCond+`
+			GROUP BY substr(d.date, 1, 10), ai.source
+			ORDER BY day`,
+			dateArgs...,
+		).Scan(&activityDays)
+	}
 
 	type taskDayRow struct {
 		Day string
 		Cnt int
 	}
 	var taskDays []taskDayRow
-	h.db.Raw(`
-		SELECT substr(d.date, 1, 10) as day, COUNT(*) as cnt
-		FROM tasks t
-		JOIN days d ON d.id = t.day_id
-		WHERE t.done = 1
-		  AND `+fromCond+` AND `+toCond+`
-		GROUP BY substr(d.date, 1, 10)
-		ORDER BY day`,
-		dateArgs...,
-	).Scan(&taskDays)
+	if unique {
+		h.db.Raw(`
+			SELECT substr(d.date, 1, 10) as day, COUNT(DISTINCT t.title) as cnt
+			FROM tasks t
+			JOIN days d ON d.id = t.day_id
+			WHERE t.done = 1
+			  AND `+fromCond+` AND `+toCond+`
+			GROUP BY substr(d.date, 1, 10)
+			ORDER BY day`,
+			dateArgs...,
+		).Scan(&taskDays)
+	} else {
+		h.db.Raw(`
+			SELECT substr(d.date, 1, 10) as day, COUNT(*) as cnt
+			FROM tasks t
+			JOIN days d ON d.id = t.day_id
+			WHERE t.done = 1
+			  AND `+fromCond+` AND `+toCond+`
+			GROUP BY substr(d.date, 1, 10)
+			ORDER BY day`,
+			dateArgs...,
+		).Scan(&taskDays)
+	}
 
-	// Merge activity and task rows into a map keyed by date.
 	bucketMap := map[string]*StatsDayBucket{}
 	ensureBucket := func(day string) *StatsDayBucket {
 		if b, ok := bucketMap[day]; ok {
@@ -284,8 +346,6 @@ func (h *StatsHandler) Get(c *gin.Context) {
 		ensureBucket(r.Day).TasksDone += r.Cnt
 	}
 
-	// Collect and sort buckets by date (map iteration is unordered).
-	// All dates are YYYY-MM-DD so lexicographic sort is chronological.
 	dates := make([]string, 0, len(bucketMap))
 	for d := range bucketMap {
 		dates = append(dates, d)
@@ -304,16 +364,29 @@ func (h *StatsHandler) Get(c *gin.Context) {
 		Total int
 	}
 	var topDays []topDayRow
-	h.db.Raw(`
-		SELECT substr(d.date, 1, 10) as day, COUNT(*) as total
-		FROM activity_items ai
-		JOIN days d ON d.id = ai.day_id
-		WHERE `+fromCond+` AND `+toCond+`
-		GROUP BY substr(d.date, 1, 10)
-		ORDER BY total DESC
-		LIMIT 5`,
-		dateArgs...,
-	).Scan(&topDays)
+	if unique {
+		h.db.Raw(`
+			SELECT substr(d.date, 1, 10) as day, COUNT(DISTINCT ai.external_id) as total
+			FROM activity_items ai
+			JOIN days d ON d.id = ai.day_id
+			WHERE `+fromCond+` AND `+toCond+`
+			GROUP BY substr(d.date, 1, 10)
+			ORDER BY total DESC
+			LIMIT 5`,
+			dateArgs...,
+		).Scan(&topDays)
+	} else {
+		h.db.Raw(`
+			SELECT substr(d.date, 1, 10) as day, COUNT(*) as total
+			FROM activity_items ai
+			JOIN days d ON d.id = ai.day_id
+			WHERE `+fromCond+` AND `+toCond+`
+			GROUP BY substr(d.date, 1, 10)
+			ORDER BY total DESC
+			LIMIT 5`,
+			dateArgs...,
+		).Scan(&topDays)
+	}
 	resp.TopDays = make([]StatsTopDay, 0, len(topDays))
 	for _, r := range topDays {
 		resp.TopDays = append(resp.TopDays, StatsTopDay{Date: r.Day, Total: r.Total})
