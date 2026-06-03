@@ -63,8 +63,9 @@ func (h *TaskHandler) Update(c *gin.Context) {
 	}
 
 	var body struct {
-		Done  *bool   `json:"done"`
-		Title *string `json:"title"`
+		Done   *bool   `json:"done"`
+		Title  *string `json:"title"`
+		Pinned *bool   `json:"pinned"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -81,6 +82,9 @@ func (h *TaskHandler) Update(c *gin.Context) {
 			return
 		}
 		task.Title = trimmed
+	}
+	if body.Pinned != nil {
+		task.Pinned = *body.Pinned
 	}
 
 	if err := h.db.Save(&task).Error; err != nil {

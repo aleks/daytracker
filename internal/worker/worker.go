@@ -373,7 +373,7 @@ func (w *Worker) carryForward(ctx context.Context, today time.Time) {
 			continue
 		}
 
-		newTask := db.Task{DayID: todayDay.ID, Title: task.Title, Done: false}
+		newTask := db.Task{DayID: todayDay.ID, Title: task.Title, Done: false, Pinned: task.Pinned}
 		if err := w.db.Create(&newTask).Error; err != nil {
 			log.Printf("worker: carry-forward insert task %q: %v", task.Title, err)
 		} else {

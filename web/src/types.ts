@@ -3,6 +3,7 @@ export interface Task {
   day_id: number
   title: string
   done: boolean
+  pinned: boolean
   created_at: string
 }
 
