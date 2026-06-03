@@ -26,7 +26,7 @@ export const api = {
       body: JSON.stringify({ title }),
     }),
 
-  updateTask: (id: number, patch: { done?: boolean; title?: string }) =>
+  updateTask: (id: number, patch: { done?: boolean; title?: string; pinned?: boolean }) =>
     request<Task>(`/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),

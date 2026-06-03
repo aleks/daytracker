@@ -13,6 +13,7 @@ type Task struct {
 	DayID     uint      `gorm:"not null;index" json:"day_id"`
 	Title     string    `gorm:"not null" json:"title"`
 	Done      bool      `gorm:"default:false" json:"done"`
+	Pinned    bool      `gorm:"default:false" json:"pinned"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

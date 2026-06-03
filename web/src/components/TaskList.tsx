@@ -108,8 +108,21 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
     }
   }
 
+  const pin = async (task: Task) => {
+    const optimistic = tasks.map(t => t.id === task.id ? { ...t, pinned: !t.pinned } : t)
+    onChanged(optimistic)
+    try {
+      await api.updateTask(task.id, { pinned: !task.pinned })
+    } catch (err) {
+      console.error('pin task:', err)
+      onChanged(tasks)
+    }
+  }
+
+  // Pinned undone → undone → done; stable within each group by id.
   const sorted = [...tasks].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1
+    if (!a.done && a.pinned !== b.pinned) return a.pinned ? -1 : 1
     return a.id - b.id
   })
 
@@ -134,7 +147,7 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
 
       <ul class="task-items">
         {sorted.map(task => (
-          <li key={task.id} class={task.done ? 'task-item done' : 'task-item'}>
+          <li key={task.id} class={['task-item', task.done ? 'done' : '', task.pinned && !task.done ? 'pinned' : ''].filter(Boolean).join(' ')}>
             <input
               type="checkbox"
               checked={task.done}
@@ -174,6 +187,13 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
                 </span>
               )
             })()}
+            {!task.done && (
+              <button
+                class={task.pinned ? 'task-pin task-pin--active' : 'task-pin'}
+                onClick={() => pin(task)}
+                title={task.pinned ? 'Unpin' : 'Pin to top'}
+              >★</button>
+            )}
             {onCopyToToday && !task.done && (
               <button
                 class="task-copy"

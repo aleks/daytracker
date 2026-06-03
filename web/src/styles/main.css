@@ -393,7 +393,13 @@ body {
   border-radius: var(--radius);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  transition: background 0.1s;
+  border-left: 3px solid transparent;
+  transition: background 0.1s, border-left-color 0.1s;
+}
+
+.task-item.pinned {
+  border-left-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-bg));
 }
 
 .task-item.done .task-title {
@@ -473,8 +479,37 @@ body {
   background: var(--color-surface);
 }
 
+.task-item.pinned:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
 .task-item:hover .task-copy {
   opacity: 1;
+}
+
+.task-pin {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 var(--space-xs);
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.task-item:hover .task-pin {
+  opacity: 1;
+}
+
+.task-pin--active {
+  color: var(--color-accent);
+  opacity: 1 !important;
+}
+
+.task-pin:hover {
+  color: var(--color-accent);
 }
 
 .task-delete {
