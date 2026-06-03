@@ -41,6 +41,7 @@ export interface StatsPeriod {
   from: string
   to: string
   active_days: number
+  unique: boolean
 }
 
 export interface StatsSummary {

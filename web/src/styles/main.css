@@ -938,6 +938,36 @@ body {
   color: #fff;
 }
 
+.dash-mode-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+
+.dash-mode-btn {
+  background: none;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  padding: 3px var(--space-sm);
+  transition: background 0.1s, color 0.1s;
+}
+
+.dash-mode-btn:hover {
+  color: var(--color-text);
+}
+
+.dash-mode-btn--active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 .dash-custom-range {
   display: flex;
   align-items: center;
