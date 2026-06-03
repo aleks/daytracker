@@ -10,7 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 import { api } from '../api'
-import type { StatsDayBucket, StatsResponse } from '../types'
+import type { SlowestItem, StatsDayBucket, StatsResponse, VelocityResponse } from '../types'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -268,6 +268,75 @@ function SourceBlock({ title, rows }: { title: string; rows: { label: string; va
   )
 }
 
+// ── Velocity section ──────────────────────────────────────────────────────────
+
+const SOURCE_LABELS: Record<string, string> = {
+  github: 'GitHub PR',
+  jira: 'Jira',
+  task: 'Task',
+}
+
+function VelocitySection({ velocity }: { velocity: VelocityResponse }) {
+  const metrics = [
+    { label: 'Avg. days to merge PR', metric: velocity.github_authored },
+    { label: 'Avg. days to close Jira ticket', metric: velocity.jira },
+    { label: 'Avg. days to complete task', metric: velocity.tasks },
+  ].filter(m => m.metric.sample_size > 0)
+
+  const hasSlowest = velocity.slowest.length > 0
+
+  if (metrics.length === 0 && !hasSlowest) return null
+
+  return (
+    <div class="dash-section">
+      <div class="dash-section-title">Velocity</div>
+      <p class="dash-velocity-note">
+        Measures calendar days from first appearance to completion. Only includes items that were resolved within the selected period. Items synced before daytracker was set up may show shorter durations than reality.
+      </p>
+
+      {metrics.length > 0 && (
+        <div class="dash-cards dash-cards--velocity">
+          {metrics.map(({ label, metric }) => (
+            <div key={label} class="stat-card">
+              <div class="stat-card-value">{metric.avg_days.toFixed(1)}d</div>
+              <div class="stat-card-label">{label}</div>
+              <div class="stat-card-sub">{metric.sample_size} completed</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasSlowest && (
+        <div class="dash-slowest">
+          <div class="dash-slowest-title">Slowest 10 completed items</div>
+          <div class="dash-slowest-list">
+            {velocity.slowest.map((item, i) => (
+              <SlowestRow key={item.external_id + item.source} rank={i + 1} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SlowestRow({ rank, item }: { rank: number; item: SlowestItem }) {
+  const label = SOURCE_LABELS[item.source] ?? item.source
+  const days = item.days === 0 ? 'same day' : `${item.days}d`
+  return (
+    <div class="dash-slowest-row">
+      <span class="dash-slowest-rank">#{rank}</span>
+      <span class={`dash-slowest-badge dash-slowest-badge--${item.source}`}>{label}</span>
+      <span class="dash-slowest-title-text">
+        {item.url
+          ? <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+          : item.title}
+      </span>
+      <span class="dash-slowest-days">{days}</span>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function Dashboard() {
@@ -277,6 +346,7 @@ export function Dashboard() {
   const [usingCustom, setUsingCustom] = useState(false)
   const [mode, setMode] = useState<'unique' | 'raw'>('unique')
   const [data, setData] = useState<StatsResponse | null>(null)
+  const [velocity, setVelocity] = useState<VelocityResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
   const { from, to } = usingCustom
@@ -285,8 +355,11 @@ export function Dashboard() {
 
   useEffect(() => {
     setLoading(true)
-    api.getStats(from || undefined, to || undefined, mode)
-      .then(setData)
+    Promise.all([
+      api.getStats(from || undefined, to || undefined, mode),
+      api.getVelocity(from || undefined, to || undefined),
+    ])
+      .then(([stats, vel]) => { setData(stats); setVelocity(vel) })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [from, to, mode])
@@ -459,6 +532,8 @@ export function Dashboard() {
               </div>
             </div>
           )}
+
+          {velocity && <VelocitySection velocity={velocity} />}
 
           {data.summary.activities_total === 0 && data.summary.tasks_total === 0 && (
             <div class="dash-empty">No data for this period.</div>

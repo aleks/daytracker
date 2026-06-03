@@ -1,4 +1,4 @@
-import type { ConnectorState, DayDetail, SearchResult, StatsResponse, Task } from './types'
+import type { ConnectorState, DayDetail, SearchResult, StatsResponse, Task, VelocityResponse } from './types'
 
 const BASE = '/api'
 
@@ -47,6 +47,14 @@ export const api = {
   },
 
   listSources: () => request<string[]>('/sources'),
+
+  getVelocity: (from?: string, to?: string) => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const qs = params.toString()
+    return request<VelocityResponse>(`/stats/velocity${qs ? '?' + qs : ''}`)
+  },
 
   getStats: (from?: string, to?: string, mode?: 'unique' | 'raw') => {
     const params = new URLSearchParams()

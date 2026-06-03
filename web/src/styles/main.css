@@ -1172,6 +1172,101 @@ body {
   color: var(--color-accent);
 }
 
+/* ── Velocity ──────────────────────────────────────────────────── */
+
+.dash-velocity-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-md);
+  line-height: 1.5;
+}
+
+.dash-cards--velocity {
+  margin-bottom: var(--space-lg);
+}
+
+.dash-slowest {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.dash-slowest-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dash-slowest-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-slowest-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dash-slowest-row:last-child {
+  border-bottom: none;
+}
+
+.dash-slowest-rank {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.dash-slowest-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.dash-slowest-badge--github     { background: #24292e; color: #fff; }
+.dash-slowest-badge--jira       { background: #0052cc; color: #fff; }
+.dash-slowest-badge--task       { background: var(--color-accent); color: #fff; }
+
+[data-theme="dark"] .dash-slowest-badge--github  { background: #444d56; }
+[data-theme="dark"] .dash-slowest-badge--jira    { background: #0052cc; }
+
+.dash-slowest-title-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-slowest-title-text a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.dash-slowest-title-text a:hover {
+  text-decoration: underline;
+  color: var(--color-accent);
+}
+
+.dash-slowest-days {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 /* ── Misc ──────────────────────────────────────────────────────── */
 
 .error-message {
