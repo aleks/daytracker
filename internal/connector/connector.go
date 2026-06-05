@@ -44,6 +44,14 @@ type StatusRefresher interface {
 	RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error)
 }
 
+// isUTCToday reports whether date (truncated to midnight) is today in UTC.
+// Used by connectors to gate "currently open" queries to today-only fetches.
+func isUTCToday(date time.Time) bool {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return date.UTC().Truncate(24 * time.Hour).Equal(today)
+}
+
 // Registry holds all registered connectors.
 type Registry struct {
 	connectors []Connector
