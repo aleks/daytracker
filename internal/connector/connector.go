@@ -44,14 +44,13 @@ type StatusRefresher interface {
 	RefreshStatuses(ctx context.Context, items []PRStatusItem) ([]PRStatusUpdate, error)
 }
 
-// isToday reports whether date represents the current calendar day in its own
-// timezone. The worker passes midnight in the configured timezone (w.today()),
-// so we compare year/month/day in that same location rather than converting to
-// UTC, which would shift the date for any UTC+ zone.
+// isToday reports whether date represents the current calendar day.
+// The worker passes UTC midnight for the current local calendar date, so
+// comparing truncated UTC values is correct and timezone-safe.
 func isToday(date time.Time) bool {
-	loc := date.Location()
-	now := time.Now().In(loc)
-	return date.Year() == now.Year() && date.Month() == now.Month() && date.Day() == now.Day()
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return date.UTC().Truncate(24 * time.Hour).Equal(today)
 }
 
 // Registry holds all registered connectors.
