@@ -153,7 +153,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	}
 
 	dateStr := date.Format("2006-01-02")
-	isToday := isUTCToday(date)
+	fetchingToday := isToday(date)
 
 	authored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s created:%s", username, dateStr))
 	if err != nil {
@@ -168,7 +168,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	// When fetching today, also pull all currently open authored PRs so that
 	// PRs with no recent activity still appear (rather than silently falling
 	// out of carry-forward if they were never fetched).
-	if isToday {
+	if fetchingToday {
 		openAuthored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s is:open", username))
 		if err != nil {
 			return nil, fmt.Errorf("github fetch open authored: %w", err)
