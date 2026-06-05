@@ -151,6 +151,41 @@ func TestJiraKind(t *testing.T) {
 	assert.Equal(t, "jira_todo", jiraKind("unknown"))
 }
 
+// ── isToday ───────────────────────────────────────────────────────────────────
+
+func TestIsToday_UTCMidnightToday(t *testing.T) {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	assert.True(t, isToday(today))
+}
+
+func TestIsToday_UTCMidnightYesterday(t *testing.T) {
+	now := time.Now().UTC()
+	yesterday := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, time.UTC)
+	assert.False(t, isToday(yesterday))
+}
+
+func TestIsToday_UTCMidnightTomorrow(t *testing.T) {
+	now := time.Now().UTC()
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	assert.False(t, isToday(tomorrow))
+}
+
+func TestIsToday_NonUTCLocationSameDateAsUTC(t *testing.T) {
+	// A UTC+2 location where the local date matches today's UTC date.
+	// The worker stores UTC midnight for the current local calendar day, so
+	// a date like "2026-06-05 00:00 UTC" must still be recognised as today
+	// regardless of what timezone the test machine runs in.
+	now := time.Now().UTC()
+	utcMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	// Wrap in a non-UTC location — should still match because isToday compares UTC.
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	require.NoError(t, err)
+	berlinMidnight := utcMidnight.In(berlin)
+	// This represents a different wall-clock time but the UTC date is still today.
+	assert.True(t, isToday(berlinMidnight))
+}
+
 // ── KindLabel: GitHub ─────────────────────────────────────────────────────────
 
 func TestGitHub_KindLabel(t *testing.T) {

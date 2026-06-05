@@ -387,8 +387,12 @@ func (w *Worker) carryForward(ctx context.Context, today time.Time) {
 }
 
 func (w *Worker) today() time.Time {
+	// Use the configured location to determine the current calendar date
+	// (year/month/day), but store midnight in UTC. All API date parsing
+	// (parseDate) truncates to UTC midnight, so Day rows must match that
+	// representation or the worker and the API disagree on which row is "today".
 	now := time.Now().In(w.loc)
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, w.loc)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 // utcToday returns today's date at midnight UTC. Used by tests.
