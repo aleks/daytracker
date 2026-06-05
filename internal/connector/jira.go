@@ -147,7 +147,7 @@ func (j *JiraConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activit
 
 	// When fetching today, also pull all currently open/in-progress tickets
 	// assigned to the user so that tickets with no recent updates still appear.
-	if isUTCToday(date) {
+	if isToday(date) {
 		openPayload, _ := json.Marshal(map[string]any{
 			"jql":        `assignee = currentUser() AND statusCategory in ("To Do", "In Progress")`,
 			"fields":     []string{"summary", "status", "issuetype"},
