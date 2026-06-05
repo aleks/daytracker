@@ -89,8 +89,9 @@ func TestGitHub_Fetch_AuthoredPR(t *testing.T) {
 func TestGitHub_Fetch_ReviewedPR(t *testing.T) {
 	reviewed := []ghPRNode{makePRNode(42, "Someone's PR", "https://github.com/org/repo/pull/42", "open", false, "bob", "org/repo")}
 	g := newTestGitHub(t, "alice",
-		searchData([]ghPRNode{}),
-		searchData(reviewed),
+		searchData([]ghPRNode{}), // authored (date-scoped)
+		searchData(reviewed),     // reviewed (date-scoped)
+		searchData([]ghPRNode{}), // open authored (today-only)
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
@@ -103,8 +104,9 @@ func TestGitHub_Fetch_ReviewedPR(t *testing.T) {
 func TestGitHub_Fetch_OwnPRExcludedFromReviewed(t *testing.T) {
 	reviewed := []ghPRNode{makePRNode(7, "Alice's own PR", "", "", false, "alice", "org/repo")}
 	g := newTestGitHub(t, "alice",
-		searchData([]ghPRNode{}),
-		searchData(reviewed),
+		searchData([]ghPRNode{}), // authored
+		searchData(reviewed),     // reviewed
+		searchData([]ghPRNode{}), // open authored
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
@@ -115,8 +117,9 @@ func TestGitHub_Fetch_OwnPRExcludedFromReviewed(t *testing.T) {
 func TestGitHub_Fetch_AlreadyAuthoredNotDuplicated(t *testing.T) {
 	pr := makePRNode(5, "Dual PR", "", "open", false, "alice", "org/repo")
 	g := newTestGitHub(t, "alice",
-		searchData([]ghPRNode{pr}),
-		searchData([]ghPRNode{pr}),
+		searchData([]ghPRNode{pr}), // authored date-scoped
+		searchData([]ghPRNode{pr}), // reviewed
+		searchData([]ghPRNode{pr}), // open authored — same PR, must not duplicate
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
@@ -146,6 +149,7 @@ func TestGitHub_Fetch_DraftPR(t *testing.T) {
 	g := newTestGitHub(t, "alice",
 		searchData(authored),
 		searchData([]ghPRNode{}),
+		searchData([]ghPRNode{}), // open authored
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
@@ -159,12 +163,58 @@ func TestGitHub_Fetch_MergedPR(t *testing.T) {
 	g := newTestGitHub(t, "alice",
 		searchData(authored),
 		searchData([]ghPRNode{}),
+		searchData([]ghPRNode{}), // open authored
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	assert.Equal(t, "authored_merged", items[0].Kind)
+}
+
+// ── Fetch: open-authored PRs (today only) ─────────────────────────────────────
+
+func TestGitHub_Fetch_OpenAuthoredIncludedForToday(t *testing.T) {
+	// A PR that was not created today (not in date-scoped authored) but is
+	// currently open — should appear when fetching today.
+	silentPR := makePRNode(99, "Silent PR", "https://github.com/org/repo/pull/99", "open", false, "alice", "org/repo")
+	g := newTestGitHub(t, "alice",
+		searchData([]ghPRNode{}),      // authored date-scoped: nothing today
+		searchData([]ghPRNode{}),      // reviewed date-scoped
+		searchData([]ghPRNode{silentPR}), // open authored: picks it up
+	)
+
+	items, err := g.Fetch(context.Background(), time.Now())
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "org/repo#99", items[0].ExternalID)
+	assert.Equal(t, "authored_open", items[0].Kind)
+}
+
+func TestGitHub_Fetch_OpenAuthoredNotFetchedForPastDate(t *testing.T) {
+	// For a past date, only two GraphQL calls should be made (no open-PR query).
+	pastDate := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+	authored := []ghPRNode{makePRNode(1, "Old PR", "", "open", false, "alice", "org/repo")}
+	g := newTestGitHub(t, "alice",
+		searchData(authored),
+		searchData([]ghPRNode{}),
+		// No third slot — server returns 500 if a third call is made.
+	)
+
+	items, err := g.Fetch(context.Background(), pastDate)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+}
+
+func TestGitHub_Fetch_OpenAuthoredQueryError(t *testing.T) {
+	g := newTestGitHub(t, "alice",
+		searchData([]ghPRNode{}), // authored ok
+		searchData([]ghPRNode{}), // reviewed ok
+		nil,                     // open authored errors
+	)
+	_, err := g.Fetch(context.Background(), time.Now())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open authored")
 }
 
 // ── resolveUsername ───────────────────────────────────────────────────────────
@@ -264,11 +314,11 @@ func TestGitHub_RefreshStatuses_BatchedInOneRequest(t *testing.T) {
 
 func TestGitHub_Fetch_InReviewPR(t *testing.T) {
 	authored := []ghPRNode{makePRNode(10, "In Review PR", "https://github.com/org/repo/pull/10", "open", false, "alice", "org/repo")}
-	// Inject reviewDecision directly onto the node.
 	authored[0].ReviewDecision = "REVIEW_REQUIRED"
 	g := newTestGitHub(t, "alice",
 		searchData(authored),
 		searchData([]ghPRNode{}),
+		searchData([]ghPRNode{}), // open authored
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())
@@ -283,6 +333,7 @@ func TestGitHub_Fetch_ApprovedPR(t *testing.T) {
 	g := newTestGitHub(t, "alice",
 		searchData(authored),
 		searchData([]ghPRNode{}),
+		searchData([]ghPRNode{}), // open authored
 	)
 
 	items, err := g.Fetch(context.Background(), time.Now())

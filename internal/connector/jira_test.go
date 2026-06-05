@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,6 +90,87 @@ func TestJira_RefreshStatuses_Empty(t *testing.T) {
 	updates, err := j.RefreshStatuses(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Empty(t, updates)
+}
+
+// ── JiraConnector.Fetch: open tickets (today only) ───────────────────────────
+
+func TestJira_Fetch_OpenTicketsIncludedForToday(t *testing.T) {
+	// An in-progress ticket that had no updates today should still appear
+	// because the second "open" query picks it up.
+	call := 0
+	srv := allPathsServer(t, map[string]http.HandlerFunc{
+		"/ex/jira/x/rest/api/3/search/jql": func(w http.ResponseWriter, r *http.Request) {
+			call++
+			switch call {
+			case 1: // date-scoped: nothing updated today
+				jsonResponse(w, map[string]any{"issues": []any{}})
+			case 2: // open/in-progress: one silent ticket
+				jsonResponse(w, map[string]any{"issues": []any{
+					map[string]any{
+						"key": "MOI-999",
+						"fields": map[string]any{
+							"summary":   "Silent ticket",
+							"issuetype": map[string]any{"name": "Task"},
+							"status": map[string]any{
+								"statusCategory": map[string]any{"key": "indeterminate"},
+							},
+						},
+					},
+				}})
+			}
+		},
+	})
+
+	j := newJiraConnector(t, srv)
+	items, err := j.Fetch(t.Context(), time.Now())
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "MOI-999", items[0].ExternalID)
+	assert.Equal(t, "jira_in_progress", items[0].Kind)
+	assert.Equal(t, 2, call, "expected two search/jql calls for today")
+}
+
+func TestJira_Fetch_OpenTicketNotDuplicatedIfAlreadyFetched(t *testing.T) {
+	// A ticket that appears in both the date-scoped and the open query
+	// must be deduplicated.
+	ticket := map[string]any{
+		"key": "MOI-1",
+		"fields": map[string]any{
+			"summary":   "Active ticket",
+			"issuetype": map[string]any{"name": "Story"},
+			"status": map[string]any{
+				"statusCategory": map[string]any{"key": "indeterminate"},
+			},
+		},
+	}
+	call := 0
+	srv := allPathsServer(t, map[string]http.HandlerFunc{
+		"/ex/jira/x/rest/api/3/search/jql": func(w http.ResponseWriter, r *http.Request) {
+			call++
+			jsonResponse(w, map[string]any{"issues": []any{ticket}})
+		},
+	})
+
+	j := newJiraConnector(t, srv)
+	items, err := j.Fetch(t.Context(), time.Now())
+	require.NoError(t, err)
+	assert.Len(t, items, 1, "ticket must not be duplicated")
+}
+
+func TestJira_Fetch_OpenQueryNotCalledForPastDate(t *testing.T) {
+	// For a past date only one search/jql call should be made.
+	call := 0
+	srv := allPathsServer(t, map[string]http.HandlerFunc{
+		"/ex/jira/x/rest/api/3/search/jql": func(w http.ResponseWriter, r *http.Request) {
+			call++
+			jsonResponse(w, map[string]any{"issues": []any{}})
+		},
+	})
+
+	j := newJiraConnector(t, srv)
+	_, err := j.Fetch(t.Context(), time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.Equal(t, 1, call, "expected exactly one search/jql call for a past date")
 }
 
 // ── JiraConnector.ShouldCarryForward ─────────────────────────────────────────

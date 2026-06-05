@@ -145,6 +145,25 @@ func (j *JiraConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activit
 		return nil, fmt.Errorf("jira: parse response: %w", err)
 	}
 
+	// When fetching today, also pull all currently open/in-progress tickets
+	// assigned to the user so that tickets with no recent updates still appear.
+	if isUTCToday(date) {
+		openPayload, _ := json.Marshal(map[string]any{
+			"jql":        `assignee = currentUser() AND statusCategory in ("To Do", "In Progress")`,
+			"fields":     []string{"summary", "status", "issuetype"},
+			"maxResults": 100,
+		})
+		openBody, err := j.post(ctx, apiBase+"/rest/api/3/search/jql", openPayload)
+		if err != nil {
+			return nil, fmt.Errorf("jira: search open: %w", err)
+		}
+		var openResult jiraSearchResponse
+		if err := json.Unmarshal(openBody, &openResult); err != nil {
+			return nil, fmt.Errorf("jira: parse open response: %w", err)
+		}
+		result.Issues = mergeJiraIssues(result.Issues, openResult.Issues)
+	}
+
 	items := make([]db.ActivityItem, 0, len(result.Issues))
 	for _, issue := range result.Issues {
 		items = append(items, db.ActivityItem{
@@ -158,6 +177,21 @@ func (j *JiraConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activit
 	}
 
 	return items, nil
+}
+
+// mergeJiraIssues appends issues from extra not already present in base
+// (deduplicated by issue key).
+func mergeJiraIssues(base, extra []jiraIssue) []jiraIssue {
+	seen := make(map[string]bool, len(base))
+	for _, i := range base {
+		seen[i.Key] = true
+	}
+	for _, i := range extra {
+		if !seen[i.Key] {
+			base = append(base, i)
+		}
+	}
+	return base
 }
 
 func (j *JiraConnector) IsTerminal(kind string) bool {

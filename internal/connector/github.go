@@ -153,6 +153,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	}
 
 	dateStr := date.Format("2006-01-02")
+	isToday := isUTCToday(date)
 
 	authored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s created:%s", username, dateStr))
 	if err != nil {
@@ -162,6 +163,17 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	reviewed, err := g.searchPRs(ctx, fmt.Sprintf("is:pr reviewed-by:%s updated:%s", username, dateStr))
 	if err != nil {
 		return nil, fmt.Errorf("github fetch reviewed: %w", err)
+	}
+
+	// When fetching today, also pull all currently open authored PRs so that
+	// PRs with no recent activity still appear (rather than silently falling
+	// out of carry-forward if they were never fetched).
+	if isToday {
+		openAuthored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s is:open", username))
+		if err != nil {
+			return nil, fmt.Errorf("github fetch open authored: %w", err)
+		}
+		authored = mergePRs(authored, openAuthored)
 	}
 
 	var items []db.ActivityItem
@@ -200,6 +212,23 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 
 	return items, nil
 }
+
+// mergePRs appends PRs from extra that are not already present in base
+// (deduplicated by repository+number).
+func mergePRs(base, extra []ghPRNode) []ghPRNode {
+	seen := make(map[string]bool, len(base))
+	for _, pr := range base {
+		seen[fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)] = true
+	}
+	for _, pr := range extra {
+		key := fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number)
+		if !seen[key] {
+			base = append(base, pr)
+		}
+	}
+	return base
+}
+
 
 func (g *GitHubConnector) searchPRs(ctx context.Context, q string) ([]ghPRNode, error) {
 	data, err := g.graphql(ctx, prSearchQuery, map[string]any{"q": q})
