@@ -5,11 +5,12 @@ import type { ActivityItem, DayDetail, Task } from '../types'
 import { ActivityList } from './ActivityList'
 import { TaskList } from './TaskList'
 
-const SOURCE_ORDER = ['github', 'jira', 'confluence'] as const
+const SOURCE_ORDER = ['github', 'jira', 'confluence', 'youtrack'] as const
 const SOURCE_LABELS: Record<string, string> = {
   github: 'GitHub',
   jira: 'Jira',
   confluence: 'Confluence',
+  youtrack: 'YouTrack',
 }
 
 interface Props {

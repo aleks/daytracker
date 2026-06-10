@@ -5,6 +5,7 @@ const SOURCE_COLORS: Record<string, string> = {
   github: 'var(--color-github)',
   jira: 'var(--color-jira)',
   confluence: 'var(--color-confluence)',
+  youtrack: 'var(--color-youtrack)',
 }
 
 type BadgeVariant = 'neutral' | 'open' | 'draft' | 'review' | 'approved' | 'changes' | 'merged' | 'closed'
@@ -31,6 +32,10 @@ const KIND_META: Record<string, KindMeta> = {
   confluence_created:   { label: 'created',     badge: 'open'    },
   confluence_edited:    { label: 'edited',      badge: 'neutral' },
   confluence_commented: { label: 'commented',   badge: 'review'  },
+  youtrack_created:     { label: 'created',     badge: 'open'    },
+  youtrack_edited:      { label: 'edited',      badge: 'neutral' },
+  youtrack_work:        { label: 'time logged', badge: 'review'  },
+  youtrack_resolved:    { label: 'resolved',    badge: 'merged'  },
 }
 
 function kindMeta(kind: string): KindMeta {
