@@ -487,6 +487,29 @@ body {
   opacity: 1;
 }
 
+.task-move-tomorrow {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  padding: 2px var(--space-sm);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.task-move-tomorrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.task-item:hover .task-move-tomorrow {
+  opacity: 1;
+}
+
 .task-pin {
   background: none;
   border: none;

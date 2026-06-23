@@ -15,12 +15,14 @@ interface Props {
   tasks: Task[]
   onChanged: (tasks: Task[]) => void
   onCopyToToday?: (title: string) => Promise<void>
+  onMoveToTomorrow?: (task: Task) => Promise<void>
 }
 
-export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
+export function TaskList({ date, tasks, onChanged, onCopyToToday, onMoveToTomorrow }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [adding, setAdding] = useState(false)
   const [copying, setCopying] = useState<number | null>(null)
+  const [movingTomorrow, setMovingTomorrow] = useState<number | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
@@ -67,6 +69,18 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
       console.error('copy task:', err)
     } finally {
       setCopying(null)
+    }
+  }
+
+  const moveToTomorrow = async (task: Task) => {
+    if (!onMoveToTomorrow) return
+    setMovingTomorrow(task.id)
+    try {
+      await onMoveToTomorrow(task)
+    } catch (err) {
+      console.error('move to tomorrow:', err)
+    } finally {
+      setMovingTomorrow(null)
     }
   }
 
@@ -202,6 +216,16 @@ export function TaskList({ date, tasks, onChanged, onCopyToToday }: Props) {
                 title="Copy to today"
               >
                 {copying === task.id ? '…' : '↑ today'}
+              </button>
+            )}
+            {onMoveToTomorrow && !task.done && (
+              <button
+                class="task-move-tomorrow"
+                onClick={() => moveToTomorrow(task)}
+                disabled={movingTomorrow === task.id}
+                title="Move to tomorrow"
+              >
+                {movingTomorrow === task.id ? '…' : '→ tomorrow'}
               </button>
             )}
             {pendingDeleteId === task.id ? (

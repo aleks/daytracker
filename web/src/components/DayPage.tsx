@@ -92,6 +92,12 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
                 await api.createTask(today, title)
                 onTodayChanged?.()
               } : undefined}
+              onMoveToTomorrow={isToday ? async (task) => {
+                const tomorrow = offsetDate(date, 1)
+                await api.createTask(tomorrow, task.title)
+                await api.deleteTask(task.id)
+                handleTasksChanged(detail.tasks.filter(t => t.id !== task.id))
+              } : undefined}
             />
           </div>
 
