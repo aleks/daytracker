@@ -17,7 +17,7 @@ import (
 func TestConnectorSync_SendsConnectorName(t *testing.T) {
 	database := newTestDB(t)
 	trigger := make(chan string, 1)
-	r := NewRouter(database, nil, trigger)
+	r := NewRouter(database, nil, trigger, "http://localhost:8080")
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/connectors/jira/sync", nil)
@@ -34,7 +34,7 @@ func TestConnectorSync_SendsConnectorName(t *testing.T) {
 
 func TestConnectorSync_NilTrigger_DoesNotPanic(t *testing.T) {
 	database := newTestDB(t)
-	r := NewRouter(database, nil, nil)
+	r := NewRouter(database, nil, nil, "http://localhost:8080")
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/connectors/github/sync", nil)

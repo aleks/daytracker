@@ -41,7 +41,8 @@ func main() {
 		port = "8080"
 	}
 
-	router := api.NewRouter(database, daytracker.WebFS(), w.TriggerChan())
+	baseURL := "http://localhost:" + port
+	router := api.NewRouter(database, daytracker.WebFS(), w.TriggerChan(), baseURL)
 
 	srv := &http.Server{
 		Addr:    ":" + port,

@@ -27,7 +27,7 @@ func brokenDB(t *testing.T) *gorm.DB {
 
 func brokenRouter(t *testing.T) http.Handler {
 	t.Helper()
-	return NewRouter(brokenDB(t), nil, nil)
+	return NewRouter(brokenDB(t), nil, nil, "http://localhost:8080")
 }
 
 // ── DayHandler 500 paths ──────────────────────────────────────────────────────

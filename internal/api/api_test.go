@@ -32,7 +32,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 func newTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	t.Helper()
 	database := newTestDB(t)
-	r := NewRouter(database, nil, nil)
+	r := NewRouter(database, nil, nil, "http://localhost:8080")
 	return database, r
 }
 
@@ -316,7 +316,7 @@ func TestConnectorSync_FullTriggerChannel(t *testing.T) {
 	// Create a full channel — Sync must not block.
 	trigger := make(chan string, 1)
 	trigger <- "existing"
-	r := NewRouter(database, nil, trigger)
+	r := NewRouter(database, nil, trigger, "http://localhost:8080")
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/connectors/jira/sync", nil)

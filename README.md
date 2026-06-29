@@ -229,6 +229,61 @@ The dashboard shows a summary of your productivity across a selected time period
 
 **Period selection:** use the preset chips (This week / This month / This year / All time) or enter a custom date range and click Apply.
 
+## MCP server
+
+Daytracker exposes a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server so that AI assistants (Claude Code, Claude Desktop, etc.) can read your activity, manage tasks, and trigger syncs directly.
+
+The MCP endpoint is built into the main daytracker server — no extra binary, no token, no login. While daytracker is running, the MCP server is available at:
+
+```
+http://localhost:8080/mcp
+```
+
+If you've changed `DAYTRACKER_PORT`, update the port in the URL accordingly.
+
+### Claude Code
+
+Run `/mcp` inside Claude Code and add a new server with the URL above, or add it directly to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "daytracker": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows), then restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "daytracker": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+
+### Available tools
+
+| Tool | Description |
+|---|---|
+| `get_day` | Get all tasks and activity items for a date (YYYY-MM-DD) |
+| `list_days` | List every day that has at least one task or activity item |
+| `create_task` | Add a task to a specific date |
+| `update_task` | Update a task's title, done status, or pinned status |
+| `delete_task` | Delete a task |
+| `list_connectors` | List connectors and their last sync time / last error |
+| `trigger_sync` | Trigger an immediate sync for a connector (`github`, `jira`, `confluence`) |
+
+---
+
 ## Contributing a connector
 
 Want to add support for a new service? See [docs/connectors.md](docs/connectors.md) for a full walkthrough of the connector interface, kind naming conventions, frontend wiring, and test patterns.

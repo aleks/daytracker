@@ -6,9 +6,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"gorm.io/gorm"
 
 	"github.com/aleks/daytracker/internal/db"
+	daytrackerMCP "github.com/aleks/daytracker/internal/mcp"
 )
 
 // serveEmbedded returns a Gin handler that serves static files from an embedded
@@ -71,7 +73,9 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 // NewRouter builds the Gin engine. webFS may be nil in development mode.
-func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engine {
+// baseURL is the server's own origin (e.g. "http://localhost:8080") and is
+// used to construct the MCP resource identifier for OAuth discovery.
+func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string, baseURL string) *gin.Engine {
 	r := gin.Default()
 	r.Use(corsMiddleware())
 
@@ -81,6 +85,24 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string) *gin.Engin
 	searchH   := &SearchHandler{db: database}
 	statsH    := &StatsHandler{db: database}
 	velocityH := &VelocityHandler{db: database}
+
+	mcpHandler := mcpserver.NewStreamableHTTPServer(daytrackerMCP.NewServer(database, trigger))
+	r.Any("/mcp", gin.WrapH(mcpHandler))
+
+	// OAuth 2.0 Protected Resource Metadata (RFC 9728).
+	// An empty AuthorizationServers list is the explicit signal to MCP clients
+	// that this endpoint requires no authentication.
+	resourceURL := baseURL + "/mcp"
+	prmHandler := mcpserver.NewProtectedResourceMetadataHandler(mcpserver.ProtectedResourceMetadataConfig{
+		Resource: resourceURL,
+	})
+	r.GET(mcpserver.ProtectedResourceMetadataPath(resourceURL), gin.WrapH(prmHandler))
+
+	// Return 404 for the OAuth authorization server discovery endpoint so that
+	// clients never receive the SPA's index.html in response to this probe.
+	r.GET("/.well-known/oauth-authorization-server", func(c *gin.Context) {
+		c.Status(http.StatusNotFound)
+	})
 
 	api := r.Group("/api")
 	{
