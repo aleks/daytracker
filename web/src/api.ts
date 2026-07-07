@@ -35,6 +35,9 @@ export const api = {
   deleteTask: (id: number) =>
     request<void>(`/tasks/${id}`, { method: 'DELETE' }),
 
+  deleteActivity: (id: number) =>
+    request<void>(`/activities/${id}`, { method: 'DELETE' }),
+
   listConnectors: () => request<ConnectorState[]>('/connectors'),
 
   syncConnector: (name: string) =>

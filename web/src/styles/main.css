@@ -715,6 +715,53 @@ body {
   text-decoration: underline;
 }
 
+.activity-delete {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 var(--space-xs);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.activity-item:hover .activity-delete {
+  opacity: 1;
+}
+
+.activity-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.activity-delete-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-error);
+}
+
+.activity-delete-yes,
+.activity-delete-no {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  padding: 2px var(--space-sm);
+}
+
+.activity-delete-yes {
+  color: var(--color-error);
+}
+
+.activity-delete-no {
+  color: var(--color-text-muted);
+}
+
 .activity-badge {
   font-size: var(--font-size-sm);
   font-weight: 500;

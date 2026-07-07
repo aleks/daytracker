@@ -62,9 +62,10 @@ interface Props {
   activities: ActivityItem[]
   source: string
   allActivities?: ActivityItem[]
+  onDelete?: (id: number) => void
 }
 
-export function ActivityList({ activities, source, allActivities = [] }: Props) {
+export function ActivityList({ activities, source, allActivities = [], onDelete }: Props) {
   if (activities.length === 0) {
     return <p class="activity-empty">No activity recorded.</p>
   }
@@ -85,7 +86,7 @@ export function ActivityList({ activities, source, allActivities = [] }: Props) 
             <div key={role ?? 'other'} class="activity-subgroup">
               {role && <span class="activity-subgroup-label">{ROLE_LABELS[role]}</span>}
               <ul class="activity-items">
-                {list.map(item => <ActivityRow key={item.id} item={item} color={color} allActivities={allActivities} />)}
+                {list.map(item => <ActivityRow key={item.id} item={item} color={color} allActivities={allActivities} onDelete={onDelete} />)}
               </ul>
             </div>
           ))}
@@ -96,15 +97,16 @@ export function ActivityList({ activities, source, allActivities = [] }: Props) 
   return (
     <ul class="activity-items">
       {activities.map(item => (
-        <ActivityRow key={item.id} item={item} color={color} allActivities={allActivities} />
+        <ActivityRow key={item.id} item={item} color={color} allActivities={allActivities} onDelete={onDelete} />
       ))}
     </ul>
   )
 }
 
-function ActivityRow({ item, color, allActivities }: { item: ActivityItem; color: string; allActivities: ActivityItem[] }) {
+function ActivityRow({ item, color, allActivities, onDelete }: { item: ActivityItem; color: string; allActivities: ActivityItem[]; onDelete?: (id: number) => void }) {
   const meta = kindMeta(item.kind)
   const [expanded, setExpanded] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(false)
 
   // Jira row: find GitHub PRs whose title contains this ticket key.
   const linkedPRs = item.source === 'jira'
@@ -149,6 +151,17 @@ function ActivityRow({ item, color, allActivities }: { item: ActivityItem; color
             </button>
           )}
           <span class={`activity-badge activity-badge--${meta.badge}`}>{meta.label}</span>
+          {onDelete && (
+            pendingDelete ? (
+              <span class="activity-delete-confirm">
+                <span class="activity-delete-label">Delete?</span>
+                <button class="activity-delete-yes" onClick={() => { setPendingDelete(false); onDelete(item.id) }}>Yes</button>
+                <button class="activity-delete-no" onClick={() => setPendingDelete(false)}>No</button>
+              </span>
+            ) : (
+              <button class="activity-delete" onClick={() => setPendingDelete(true)} title="Remove from this day">×</button>
+            )
+          )}
         </div>
       </div>
       {expanded && linkedPRs.length > 0 && (

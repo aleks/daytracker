@@ -82,6 +82,7 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string, baseURL st
 	taskH     := &TaskHandler{db: database}
 	dayH      := &DayHandler{db: database}
 	connH     := &ConnectorHandler{db: database, trigger: trigger}
+	activityH := &ActivityHandler{db: database}
 	searchH   := &SearchHandler{db: database}
 	statsH    := &StatsHandler{db: database}
 	velocityH := &VelocityHandler{db: database}
@@ -129,6 +130,7 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string, baseURL st
 		api.POST("/days/:date/tasks", taskH.Create)
 		api.PATCH("/tasks/:id", taskH.Update)
 		api.DELETE("/tasks/:id", taskH.Delete)
+		api.DELETE("/activities/:id", activityH.Delete)
 		api.GET("/connectors", connH.List)
 		api.POST("/connectors/:name/sync", connH.Sync)
 		api.GET("/search", searchH.Search)
