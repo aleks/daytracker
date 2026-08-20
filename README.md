@@ -133,6 +133,12 @@ Uses the [GitHub GraphQL API](https://docs.github.com/en/graphql) with a persona
 |---|---|
 | `DAYTRACKER_GITHUB_TOKEN` | A GitHub personal access token |
 
+**Optional variables:**
+
+| Variable | Description |
+|---|---|
+| `DAYTRACKER_GITHUB_ORG` | Restrict synced PRs to a single GitHub org (e.g. `acme`). Unset means no org filtering |
+
 **How to create a token:**
 1. Go to <https://github.com/settings/tokens> → **Generate new token (classic)**
 2. Select scopes: `repo`, `read:user`

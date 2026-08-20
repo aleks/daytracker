@@ -20,6 +20,7 @@ const githubGraphQLEndpoint = "https://api.github.com/graphql"
 // GitHubConnector fetches PRs authored or reviewed by the current user via the GitHub GraphQL API.
 type GitHubConnector struct {
 	token  string
+	org    string
 	client *http.Client
 
 	usernameOnce sync.Once
@@ -30,6 +31,7 @@ type GitHubConnector struct {
 func NewGitHub() *GitHubConnector {
 	return &GitHubConnector{
 		token:  os.Getenv("DAYTRACKER_GITHUB_TOKEN"),
+		org:    os.Getenv("DAYTRACKER_GITHUB_ORG"),
 		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -89,6 +91,15 @@ func (g *GitHubConnector) IsTerminal(kind string) bool {
 		return true
 	}
 	return false
+}
+
+// scopedQuery appends an org: qualifier to a search query when DAYTRACKER_GITHUB_ORG
+// is configured, restricting results to that org's repositories.
+func (g *GitHubConnector) scopedQuery(q string) string {
+	if g.org == "" {
+		return q
+	}
+	return fmt.Sprintf("%s org:%s", q, g.org)
 }
 
 func (g *GitHubConnector) resolveUsername(ctx context.Context) (string, error) {
@@ -155,12 +166,12 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	dateStr := date.Format("2006-01-02")
 	fetchingToday := isToday(date)
 
-	authored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s created:%s", username, dateStr))
+	authored, err := g.searchPRs(ctx, g.scopedQuery(fmt.Sprintf("is:pr author:%s created:%s", username, dateStr)))
 	if err != nil {
 		return nil, fmt.Errorf("github fetch authored: %w", err)
 	}
 
-	reviewed, err := g.searchPRs(ctx, fmt.Sprintf("is:pr reviewed-by:%s updated:%s", username, dateStr))
+	reviewed, err := g.searchPRs(ctx, g.scopedQuery(fmt.Sprintf("is:pr reviewed-by:%s updated:%s", username, dateStr)))
 	if err != nil {
 		return nil, fmt.Errorf("github fetch reviewed: %w", err)
 	}
@@ -169,7 +180,7 @@ func (g *GitHubConnector) Fetch(ctx context.Context, date time.Time) ([]db.Activ
 	// PRs with no recent activity still appear (rather than silently falling
 	// out of carry-forward if they were never fetched).
 	if fetchingToday {
-		openAuthored, err := g.searchPRs(ctx, fmt.Sprintf("is:pr author:%s is:open", username))
+		openAuthored, err := g.searchPRs(ctx, g.scopedQuery(fmt.Sprintf("is:pr author:%s is:open", username)))
 		if err != nil {
 			return nil, fmt.Errorf("github fetch open authored: %w", err)
 		}

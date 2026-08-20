@@ -43,6 +43,7 @@ Defined in `.env` (loaded by the server at startup). See `.env.example` for the 
 | Variable | Purpose |
 |---|---|
 | `DAYTRACKER_GITHUB_TOKEN` | GitHub PAT (scopes: `repo`, `read:user`) |
+| `DAYTRACKER_GITHUB_ORG` | Restrict synced PRs to a single GitHub org, e.g. `acme` (optional) |
 | `DAYTRACKER_JIRA_BASE_URL` | e.g. `https://your-org.atlassian.net` |
 | `DAYTRACKER_JIRA_EMAIL` | Atlassian account email |
 | `DAYTRACKER_JIRA_TOKEN` | Atlassian API token |

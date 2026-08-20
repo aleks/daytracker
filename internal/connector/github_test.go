@@ -342,6 +342,72 @@ func TestGitHub_Fetch_ApprovedPR(t *testing.T) {
 	assert.Equal(t, "authored_approved", items[0].Kind)
 }
 
+// ── org filtering ─────────────────────────────────────────────────────────────
+
+func TestGitHub_ScopedQuery(t *testing.T) {
+	scoped := &GitHubConnector{org: "acme"}
+	assert.Equal(t, "is:pr foo org:acme", scoped.scopedQuery("is:pr foo"))
+
+	unscoped := &GitHubConnector{}
+	assert.Equal(t, "is:pr foo", unscoped.scopedQuery("is:pr foo"))
+}
+
+func TestGitHub_Fetch_OrgFilterAppendedToQueries(t *testing.T) {
+	var capturedQueries []string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables struct {
+				Q string `json:"q"`
+			} `json:"variables"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		capturedQueries = append(capturedQueries, body.Variables.Q)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"data": searchData([]ghPRNode{})})
+	}))
+	t.Cleanup(srv.Close)
+
+	g := &GitHubConnector{token: "fake-token", org: "acme", client: clientFor(srv)}
+	g.usernameOnce.Do(func() { g.username = "alice" })
+
+	// time.Now() triggers all three queries: authored, reviewed, open-authored.
+	_, err := g.Fetch(context.Background(), time.Now())
+	require.NoError(t, err)
+
+	require.Len(t, capturedQueries, 3)
+	for _, q := range capturedQueries {
+		assert.Contains(t, q, "org:acme")
+	}
+}
+
+func TestGitHub_Fetch_NoOrgFilterWhenUnset(t *testing.T) {
+	var capturedQueries []string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables struct {
+				Q string `json:"q"`
+			} `json:"variables"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		capturedQueries = append(capturedQueries, body.Variables.Q)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"data": searchData([]ghPRNode{})})
+	}))
+	t.Cleanup(srv.Close)
+
+	g := &GitHubConnector{token: "fake-token", client: clientFor(srv)}
+	g.usernameOnce.Do(func() { g.username = "alice" })
+
+	// A past date only triggers authored + reviewed queries (no open-authored call).
+	_, err := g.Fetch(context.Background(), time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	require.Len(t, capturedQueries, 2)
+	for _, q := range capturedQueries {
+		assert.NotContains(t, q, "org:")
+	}
+}
+
 // ── ShouldCarryForward ────────────────────────────────────────────────────────
 
 func TestGitHub_ShouldCarryForward(t *testing.T) {
