@@ -21,6 +21,7 @@ export function App() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [activeDates, setActiveDates] = useState<Set<string>>(new Set())
   const [refreshKey, setRefreshKey] = useState(0)
+  const [daysVersion, setDaysVersion] = useState(0)
   const [theme, setTheme] = useState<'light' | 'dark'>(initTheme)
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function App() {
         setActiveDates(new Set(days.map(d => d.date.slice(0, 10))))
       })
       .catch(console.error)
-  }, [refreshKey])
+  }, [refreshKey, daysVersion])
 
   const handleSelectDate = (date: string) => {
     setSelectedDate(date)
@@ -104,6 +105,7 @@ export function App() {
                 date={selectedDate}
                 isToday={selectedDate === today}
                 onTodayChanged={handleDayChanged}
+                onDayContentChanged={() => setDaysVersion(v => v + 1)}
                 onNavigate={handleSelectDate}
               />
             </main>

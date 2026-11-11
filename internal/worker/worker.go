@@ -88,6 +88,11 @@ func (w *Worker) TriggerChan() chan<- string {
 	return w.trigger
 }
 
+// BackupDay updates the snapshot after a work journal entry changes.
+func (w *Worker) BackupDay(date time.Time) {
+	w.writeBackup(context.Background(), date)
+}
+
 func (w *Worker) Run(ctx context.Context) {
 	w.runBackfill(ctx)
 	if ctx.Err() != nil {

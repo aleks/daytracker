@@ -18,7 +18,7 @@ func Open() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	if err := db.AutoMigrate(&Day{}, &Task{}, &ActivityItem{}, &ConnectorState{}); err != nil {
+	if err := db.AutoMigrate(&Day{}, &Task{}, &WorkLogEntry{}, &ActivityItem{}, &ConnectorState{}); err != nil {
 		return nil, err
 	}
 

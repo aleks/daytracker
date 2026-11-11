@@ -27,7 +27,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	sqlDB, err := database.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, database.AutoMigrate(&db.Day{}, &db.Task{}, &db.ActivityItem{}, &db.ConnectorState{}))
+	require.NoError(t, database.AutoMigrate(&db.Day{}, &db.Task{}, &db.WorkLogEntry{}, &db.ActivityItem{}, &db.ConnectorState{}))
 	return database
 }
 
@@ -70,8 +70,8 @@ func (s *stubConnector) Fetch(_ context.Context, _ time.Time) ([]db.ActivityItem
 // stubRefresher adds StatusRefresher capability to a stubConnector.
 type stubRefresher struct {
 	stubConnector
-	updates      []connector.PRStatusUpdate
-	err          error
+	updates       []connector.PRStatusUpdate
+	err           error
 	terminalKinds map[string]bool
 }
 
@@ -311,7 +311,7 @@ func TestRefreshAllStatuses_OnlyNonTerminalSentToRefresher(t *testing.T) {
 		item := db.ActivityItem{
 			DayID: day.ID, Source: "github",
 			ExternalID: "repo#" + string(rune('1'+i)),
-			Kind: kind, Title: "PR",
+			Kind:       kind, Title: "PR",
 		}
 		require.NoError(t, database.Create(&item).Error)
 	}

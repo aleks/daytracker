@@ -1,4 +1,4 @@
-import type { ConnectorState, DayDetail, SearchResult, StatsResponse, Task, VelocityResponse } from './types'
+import type { ConnectorState, DayDetail, SearchResult, StatsResponse, Task, VelocityResponse, WorkLogEntry } from './types'
 
 const BASE = '/api'
 
@@ -19,6 +19,21 @@ export const api = {
   listDays: () => request<{ id: number; date: string }[]>('/days'),
 
   getDay: (date: string) => request<DayDetail>(`/days/${date}`),
+
+  createWorkLog: (date: string, content: string) =>
+    request<WorkLogEntry>(`/days/${date}/work-logs`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  updateWorkLog: (id: number, content: string) =>
+    request<WorkLogEntry>(`/work-logs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteWorkLog: (id: number) =>
+    request<void>(`/work-logs/${id}`, { method: 'DELETE' }),
 
   createTask: (date: string, title: string) =>
     request<Task>(`/days/${date}/tasks`, {

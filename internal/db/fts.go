@@ -6,8 +6,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// SetupFTS creates the FTS5 virtual tables and sync triggers for activity_items
-// and tasks, then backfills any rows that are not yet indexed. Safe to call on
+// SetupFTS creates the FTS5 virtual tables and sync triggers for activities,
+// tasks and journal entries, then indexes existing rows. Safe to call on
 // every startup — all statements are idempotent.
 func SetupFTS(database *gorm.DB) error {
 	sqls := []string{
@@ -18,6 +18,9 @@ func SetupFTS(database *gorm.DB) error {
 
 		`CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts
 		 USING fts5(title, content='tasks', content_rowid='id')`,
+
+		`CREATE VIRTUAL TABLE IF NOT EXISTS work_log_entries_fts
+		 USING fts5(content, content='work_log_entries', content_rowid='id')`,
 
 		// Keep activity_items_fts in sync.
 		`CREATE TRIGGER IF NOT EXISTS activity_items_fts_insert
@@ -53,11 +56,28 @@ func SetupFTS(database *gorm.DB) error {
 		   INSERT INTO tasks_fts(tasks_fts, rowid, title) VALUES ('delete', old.id, old.title);
 		 END`,
 
+		`CREATE TRIGGER IF NOT EXISTS work_log_entries_fts_insert
+		 AFTER INSERT ON work_log_entries BEGIN
+		   INSERT INTO work_log_entries_fts(rowid, content) VALUES (new.id, new.content);
+		 END`,
+
+		`CREATE TRIGGER IF NOT EXISTS work_log_entries_fts_update
+		 AFTER UPDATE ON work_log_entries BEGIN
+		   INSERT INTO work_log_entries_fts(work_log_entries_fts, rowid, content) VALUES ('delete', old.id, old.content);
+		   INSERT INTO work_log_entries_fts(rowid, content) VALUES (new.id, new.content);
+		 END`,
+
+		`CREATE TRIGGER IF NOT EXISTS work_log_entries_fts_delete
+		 AFTER DELETE ON work_log_entries BEGIN
+		   INSERT INTO work_log_entries_fts(work_log_entries_fts, rowid, content) VALUES ('delete', old.id, old.content);
+		 END`,
+
 		// Rebuild the FTS index from the content tables on every startup.
 		// This is the correct way to sync external content= FTS5 tables and
 		// handles the case where data existed before the FTS tables were created.
 		`INSERT INTO activity_items_fts(activity_items_fts) VALUES('rebuild')`,
 		`INSERT INTO tasks_fts(tasks_fts) VALUES('rebuild')`,
+		`INSERT INTO work_log_entries_fts(work_log_entries_fts) VALUES('rebuild')`,
 	}
 
 	for _, sql := range sqls {

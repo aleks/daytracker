@@ -25,7 +25,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	sqlDB, err := database.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, database.AutoMigrate(&db.Day{}, &db.Task{}, &db.ActivityItem{}, &db.ConnectorState{}))
+	require.NoError(t, database.AutoMigrate(&db.Day{}, &db.Task{}, &db.WorkLogEntry{}, &db.ActivityItem{}, &db.ConnectorState{}))
 	return database
 }
 

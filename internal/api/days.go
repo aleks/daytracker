@@ -16,6 +16,7 @@ type DayHandler struct {
 type DayDetail struct {
 	db.Day
 	Tasks      []db.Task         `json:"tasks"`
+	WorkLogs   []db.WorkLogEntry `json:"work_logs"`
 	Activities []db.ActivityItem `json:"activities"`
 }
 
@@ -23,6 +24,7 @@ func (h *DayHandler) List(c *gin.Context) {
 	var days []db.Day
 	err := h.db.
 		Where(`EXISTS (SELECT 1 FROM tasks WHERE tasks.day_id = days.id)
+			OR EXISTS (SELECT 1 FROM work_log_entries WHERE work_log_entries.day_id = days.id)
 			OR EXISTS (SELECT 1 FROM activity_items WHERE activity_items.day_id = days.id)`).
 		Order("date desc").
 		Find(&days).Error
@@ -57,9 +59,16 @@ func (h *DayHandler) Get(c *gin.Context) {
 		return
 	}
 
+	var workLogs []db.WorkLogEntry
+	if err := h.db.Where("day_id = ?", day.ID).Order("created_at desc, id desc").Find(&workLogs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, DayDetail{
 		Day:        day,
 		Tasks:      tasks,
+		WorkLogs:   workLogs,
 		Activities: activities,
 	})
 }

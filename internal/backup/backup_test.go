@@ -25,7 +25,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	sqlDB, err := database.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, database.AutoMigrate(&db.Day{}, &db.Task{}, &db.ActivityItem{}, &db.ConnectorState{}))
+	require.NoError(t, database.AutoMigrate(&db.Day{}, &db.Task{}, &db.WorkLogEntry{}, &db.ActivityItem{}, &db.ConnectorState{}))
 	return database
 }
 
@@ -35,8 +35,8 @@ type stubConnector struct {
 	labels map[string]string
 }
 
-func (s *stubConnector) Name() string        { return s.name }
-func (s *stubConnector) IsConfigured() bool  { return true }
+func (s *stubConnector) Name() string       { return s.name }
+func (s *stubConnector) IsConfigured() bool { return true }
 func (s *stubConnector) KindLabel(kind string) string {
 	if label, ok := s.labels[kind]; ok {
 		return label
@@ -77,6 +77,20 @@ func TestWriteDay_SkipsDateWithNoRow(t *testing.T) {
 		return nil
 	})
 	assert.Empty(t, files)
+}
+
+func TestWriteDay_WorkLogOnly(t *testing.T) {
+	database := newTestDB(t)
+	root := t.TempDir()
+	w := New(root, database, newRegistry())
+	date := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	day := db.Day{Date: date}
+	require.NoError(t, database.Create(&day).Error)
+	require.NoError(t, database.Create(&db.WorkLogEntry{DayID: day.ID, Content: "First line\nSecond line"}).Error)
+	require.NoError(t, database.Create(&db.WorkLogEntry{DayID: day.ID, Content: "Another note"}).Error)
+
+	require.NoError(t, w.WriteDay(context.Background(), date))
+	assert.Equal(t, "# 2025-06-15\n\n## Work journal\n\nAnother note\n\nFirst line\nSecond line\n", readFile(t, root, "2025", "06", "15.md"))
 }
 
 func TestWriteDay_SkipsDayWithNoTasksOrActivities(t *testing.T) {

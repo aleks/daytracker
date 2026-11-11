@@ -15,8 +15,8 @@ type SearchHandler struct {
 // SearchResult is one autocomplete hit returned to the frontend.
 type SearchResult struct {
 	Date   string `json:"date"`
-	Type   string `json:"type"`   // "activity" or "task"
-	Source string `json:"source"` // connector name for activities, empty for tasks
+	Type   string `json:"type"`   // "activity", "task" or "work_journal"
+	Source string `json:"source"` // connector name for activities, empty otherwise
 	Title  string `json:"title"`
 	URL    string `json:"url"`
 }
@@ -33,10 +33,10 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	// FTS5 requires the query to end with * for prefix matching.
 	ftsQuery := ftsEscape(q) + "*"
 
-	results := make([]SearchResult, 0)
+	var activities, tasks, journal []SearchResult
 
 	// Activities — skip when filtering to tasks only
-	if source != "tasks" {
+	if source != "tasks" && source != "work_journal" {
 		type activityRow struct {
 			Date   string
 			Source string
@@ -63,7 +63,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 			return
 		}
 		for _, r := range activityRows {
-			results = append(results, SearchResult{
+			activities = append(activities, SearchResult{
 				Date:   r.Date[:10],
 				Type:   "activity",
 				Source: r.Source,
@@ -92,7 +92,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 			return
 		}
 		for _, r := range taskRows {
-			results = append(results, SearchResult{
+			tasks = append(tasks, SearchResult{
 				Date:  r.Date[:10],
 				Type:  "task",
 				Title: r.Title,
@@ -100,9 +100,42 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		}
 	}
 
-	// Cap combined results at 15.
-	if len(results) > 15 {
-		results = results[:15]
+	if source == "" || source == "work_journal" {
+		type journalRow struct {
+			Date  string
+			Title string
+		}
+		var journalRows []journalRow
+		journalSQL := `
+			SELECT d.date, snippet(work_log_entries_fts, 0, '', '', ' … ', 20) AS title
+			FROM work_log_entries_fts fts
+			JOIN work_log_entries w ON w.id = fts.rowid
+			JOIN days d ON d.id = w.day_id
+			WHERE work_log_entries_fts MATCH ?
+			ORDER BY fts.rank LIMIT 15`
+		if err := h.db.Raw(journalSQL, ftsQuery).Scan(&journalRows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, r := range journalRows {
+			journal = append(journal, SearchResult{Date: r.Date[:10], Type: "work_journal", Title: r.Title})
+		}
+	}
+
+	// Interleave the ranked groups so one type cannot hide all the others.
+	results := make([]SearchResult, 0, 15)
+	groups := [][]SearchResult{activities, tasks, journal}
+	for i := 0; len(results) < 15; i++ {
+		added := false
+		for _, group := range groups {
+			if i < len(group) && len(results) < 15 {
+				results = append(results, group[i])
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
 	}
 
 	c.JSON(http.StatusOK, results)

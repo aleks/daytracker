@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -23,6 +24,7 @@ type Writer struct {
 	root     string
 	db       *gorm.DB
 	registry *connector.Registry
+	mu       sync.Mutex
 }
 
 func New(root string, database *gorm.DB, registry *connector.Registry) *Writer {
@@ -33,6 +35,8 @@ func New(root string, database *gorm.DB, registry *connector.Registry) *Writer {
 // directories as needed. It is idempotent — calling it multiple times for the
 // same date overwrites the file with the latest state.
 func (w *Writer) WriteDay(ctx context.Context, date time.Time) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	date = date.UTC().Truncate(24 * time.Hour)
 
 	var days []db.Day
@@ -54,18 +58,29 @@ func (w *Writer) WriteDay(ctx context.Context, date time.Time) error {
 		return fmt.Errorf("backup: query activities: %w", err)
 	}
 
-	if len(tasks) == 0 && len(activities) == 0 {
-		return nil
+	var workLogs []db.WorkLogEntry
+	if err := w.db.WithContext(ctx).Where("day_id = ?", day.ID).Order("created_at desc, id desc").Find(&workLogs).Error; err != nil {
+		return fmt.Errorf("backup: query work logs: %w", err)
 	}
 
-	content := w.render(date, tasks, activities)
-
 	dir := filepath.Join(w.root, date.Format("2006"), date.Format("01"))
+	path := filepath.Join(dir, date.Format("02")+".md")
+	if len(tasks) == 0 && len(activities) == 0 && len(workLogs) == 0 {
+		// Refresh an existing snapshot to avoid leaving deleted content behind,
+		// but do not create files for days that have always been empty.
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			return fmt.Errorf("backup: stat %s: %w", path, err)
+		}
+	}
+
+	content := w.render(date, tasks, activities, workLogs)
+
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("backup: mkdir %s: %w", dir, err)
 	}
 
-	path := filepath.Join(dir, date.Format("02")+".md")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("backup: write %s: %w", path, err)
 	}
@@ -73,7 +88,7 @@ func (w *Writer) WriteDay(ctx context.Context, date time.Time) error {
 	return nil
 }
 
-func (w *Writer) render(date time.Time, tasks []db.Task, activities []db.ActivityItem) string {
+func (w *Writer) render(date time.Time, tasks []db.Task, activities []db.ActivityItem, workLogs []db.WorkLogEntry) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s\n", date.Format("2006-01-02"))
@@ -86,6 +101,13 @@ func (w *Writer) render(date time.Time, tasks []db.Task, activities []db.Activit
 				mark = "x"
 			}
 			fmt.Fprintf(&b, "- [%s] %s\n", mark, renderTaskTitle(t.Title))
+		}
+	}
+
+	if len(workLogs) > 0 {
+		b.WriteString("\n## Work journal\n")
+		for _, entry := range workLogs {
+			fmt.Fprintf(&b, "\n%s\n", entry.Content)
 		}
 	}
 

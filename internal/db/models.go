@@ -17,6 +17,13 @@ type Task struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type WorkLogEntry struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	DayID     uint      `gorm:"not null;index" json:"day_id"`
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type ActivityItem struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
 	DayID      uint      `gorm:"not null;uniqueIndex:idx_source_ext_day" json:"day_id"`

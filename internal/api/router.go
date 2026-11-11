@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -75,16 +76,20 @@ func corsMiddleware() gin.HandlerFunc {
 // NewRouter builds the Gin engine. webFS may be nil in development mode.
 // baseURL is the server's own origin (e.g. "http://localhost:8080") and is
 // used to construct the MCP resource identifier for OAuth discovery.
-func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string, baseURL string) *gin.Engine {
+func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string, baseURL string, backupDay ...func(time.Time)) *gin.Engine {
 	r := gin.Default()
 	r.Use(corsMiddleware())
 
-	taskH     := &TaskHandler{db: database}
-	dayH      := &DayHandler{db: database}
-	connH     := &ConnectorHandler{db: database, trigger: trigger}
+	taskH := &TaskHandler{db: database}
+	workLogH := &WorkLogHandler{db: database}
+	if len(backupDay) > 0 {
+		workLogH.backupDay = backupDay[0]
+	}
+	dayH := &DayHandler{db: database}
+	connH := &ConnectorHandler{db: database, trigger: trigger}
 	activityH := &ActivityHandler{db: database}
-	searchH   := &SearchHandler{db: database}
-	statsH    := &StatsHandler{db: database}
+	searchH := &SearchHandler{db: database}
+	statsH := &StatsHandler{db: database}
 	velocityH := &VelocityHandler{db: database}
 
 	mcpHandler := mcpserver.NewStreamableHTTPServer(daytrackerMCP.NewServer(database, trigger))
@@ -128,6 +133,9 @@ func NewRouter(database *gorm.DB, webFS fs.FS, trigger chan<- string, baseURL st
 			c.JSON(http.StatusOK, activities)
 		})
 		api.POST("/days/:date/tasks", taskH.Create)
+		api.POST("/days/:date/work-logs", workLogH.Create)
+		api.PATCH("/work-logs/:id", workLogH.Update)
+		api.DELETE("/work-logs/:id", workLogH.Delete)
 		api.PATCH("/tasks/:id", taskH.Update)
 		api.DELETE("/tasks/:id", taskH.Delete)
 		api.DELETE("/activities/:id", activityH.Delete)

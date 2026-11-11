@@ -19,6 +19,13 @@ export interface ActivityItem {
   fetched_at: string
 }
 
+export interface WorkLogEntry {
+  id: number
+  day_id: number
+  content: string
+  created_at: string
+}
+
 export interface Day {
   id: number
   date: string
@@ -27,12 +34,13 @@ export interface Day {
 
 export interface DayDetail extends Day {
   tasks: Task[]
+  work_logs: WorkLogEntry[]
   activities: ActivityItem[]
 }
 
 export interface SearchResult {
   date: string
-  type: 'activity' | 'task'
+  type: 'activity' | 'task' | 'work_journal'
   source: string
   title: string
   url: string

@@ -4,6 +4,7 @@ import { localToday } from '../date'
 import type { ActivityItem, DayDetail, Task } from '../types'
 import { ActivityList } from './ActivityList'
 import { TaskList } from './TaskList'
+import { WorkLog } from './WorkLog'
 
 const SOURCE_ORDER = ['github', 'jira', 'confluence'] as const
 const SOURCE_LABELS: Record<string, string> = {
@@ -16,6 +17,7 @@ interface Props {
   date: string
   isToday?: boolean
   onTodayChanged?: () => void
+  onDayContentChanged?: () => void
   onNavigate?: (date: string) => void
 }
 
@@ -32,7 +34,7 @@ function offsetDate(dateStr: string, days: number): string {
   return `${d.getFullYear()}-${mm}-${dd}`
 }
 
-export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
+export function DayPage({ date, isToday, onTodayChanged, onDayContentChanged, onNavigate }: Props) {
   const [detail, setDetail] = useState<DayDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -110,6 +112,19 @@ export function DayPage({ date, isToday, onTodayChanged, onNavigate }: Props) {
                 handleTasksChanged(detail.tasks.filter(t => t.id !== task.id))
               } : undefined}
             />
+          </div>
+
+          <div class="day-section">
+            <h3 class="section-heading">Work journal</h3>
+            <WorkLog date={date} entries={detail.work_logs} onAdded={entry => {
+              setDetail(prev => prev ? { ...prev, work_logs: [entry, ...prev.work_logs] } : prev)
+              onDayContentChanged?.()
+            }} onUpdated={entry => {
+              setDetail(prev => prev ? { ...prev, work_logs: prev.work_logs.map(item => item.id === entry.id ? entry : item) } : prev)
+            }} onDeleted={id => {
+              setDetail(prev => prev ? { ...prev, work_logs: prev.work_logs.filter(item => item.id !== id) } : prev)
+              onDayContentChanged?.()
+            }} />
           </div>
 
           {(() => {

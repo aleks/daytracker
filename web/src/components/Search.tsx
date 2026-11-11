@@ -95,6 +95,7 @@ export function Search({ onSelect }: Props) {
         >
           <option value="">All</option>
           <option value="tasks">Tasks</option>
+          <option value="work_journal">Work journal</option>
           {sources.map(s => (
             <option key={s} value={s}>{SOURCE_LABELS[s] ?? s}</option>
           ))}
@@ -116,7 +117,7 @@ export function Search({ onSelect }: Props) {
         <ul class="search-dropdown" role="listbox">
           {results.map((r, i) => (
             <li
-              key={`${r.date}-${r.title}`}
+              key={`${r.type}-${r.date}-${i}`}
               class={`search-result${i === activeIdx ? ' search-result--active' : ''}`}
               role="option"
               aria-selected={i === activeIdx}
@@ -125,7 +126,7 @@ export function Search({ onSelect }: Props) {
             >
               <span class="search-result-title">{r.title}</span>
               <span class="search-result-meta">
-                {r.source ? (SOURCE_LABELS[r.source] ?? r.source) + ' · ' : ''}
+                {r.type === 'work_journal' ? 'Work journal · ' : r.source ? (SOURCE_LABELS[r.source] ?? r.source) + ' · ' : ''}
                 {formatDate(r.date)}
               </span>
             </li>

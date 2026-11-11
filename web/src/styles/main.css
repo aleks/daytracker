@@ -336,6 +336,150 @@ body {
 
 /* ── Tasks ─────────────────────────────────────────────────────── */
 
+.work-log-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.work-log-form textarea {
+  width: 100%;
+  resize: vertical;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font: inherit;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.work-log-form textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.work-log-form button {
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+}
+
+.work-log-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.work-log-entries {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.work-log-entry {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  overflow-wrap: anywhere;
+}
+
+.work-log-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.work-log-time {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.work-log-content {
+  white-space: pre-wrap;
+}
+
+.work-log-actions {
+  display: flex;
+  gap: var(--space-sm);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.work-log-entry:hover .work-log-actions,
+.work-log-entry:focus-within .work-log-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .work-log-actions { opacity: 1; }
+}
+
+.work-log-action {
+  padding: 0 var(--space-xs);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.work-log-action:disabled { cursor: not-allowed; }
+
+.work-log-edit textarea {
+  width: 100%;
+  resize: vertical;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.work-log-edit-buttons {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.work-log-edit-buttons button {
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font: inherit;
+  cursor: pointer;
+}
+
+.work-log-save {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.work-log-edit-buttons .work-log-cancel {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.work-log-edit-buttons button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.work-log-edit-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .task-add {
   display: flex;
   gap: var(--space-sm);
